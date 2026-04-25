@@ -9,14 +9,15 @@
 1. [Overview](#overview)
 2. [How It Works](#how-it-works)
 3. [Getting Started](#getting-started)
-4. [REST API Reference](#rest-api-reference)
-5. [WebSocket Protocol](#websocket-protocol)
-6. [Webhook Integration](#webhook-integration)
-7. [Integrity Report Schema](#integrity-report-schema)
-8. [Verdict & Scoring Logic](#verdict--scoring-logic)
-9. [Alert Types](#alert-types)
-10. [Integration Examples](#integration-examples)
-11. [Production Checklist](#production-checklist)
+4. [Platform Dashboard — Demo App](#platform-dashboard--demo-app)
+5. [REST API Reference](#rest-api-reference)
+6. [WebSocket Protocol](#websocket-protocol)
+7. [Webhook Integration](#webhook-integration)
+8. [Integrity Report Schema](#integrity-report-schema)
+9. [Verdict & Scoring Logic](#verdict--scoring-logic)
+10. [Alert Types](#alert-types)
+11. [Integration Examples](#integration-examples)
+12. [Production Checklist](#production-checklist)
 
 ---
 
@@ -42,7 +43,7 @@ Your Platform Backend
         ▼
 POST /api/sessions  ──────────────────────────────────┐
         │                                             │
-        │  ← session_id + embed_url                  │
+        │  ← session_id + embed_url                   │
         ▼                                             │
 <iframe src="{embed_url}"                             │
         allow="camera; microphone">                   │
@@ -53,13 +54,13 @@ WebSocket /ws/{session_id}                            │
   • register  (face enrollment)                       │
   • calibrate (gaze baseline)                         │
   • frame     (live monitoring frames)                │
-  • end_session                                        │
+  • end_session                                       │
         │                                             │
         │  Real-time alerts ──────────────────────────┤
-        │  via webhook POST or postMessage             │
+        │  via webhook POST or postMessage            │
         │                                             │
         ▼                                             │
-GET /api/sessions/{id}/report  ◄─────────────────────┘
+GET /api/sessions/{id}/report   ◄─────────────────────┘
 ```
 
 ---
@@ -92,6 +93,43 @@ python server.py
 Server starts at `http://localhost:8000`.
 
 Interactive API docs are available at `http://localhost:8000/docs`.
+
+---
+
+## Platform Dashboard — Demo App
+
+A fully working example platform is included in the repository at:
+
+```
+static/platform-dashboard(example usage app).html
+```
+
+Open it directly in your browser while the server is running:
+
+```
+http://localhost:8000/static/platform-dashboard(example usage app).html
+```
+
+### What it demonstrates
+
+- **Creating sessions** — fill in candidate name, ID, exam ID and label, then click `CREATE SESSION` to call `POST /api/sessions`
+- **Embedding the proctor widget** — the widget iframe loads automatically after session creation, giving the candidate the full registration → calibration → monitoring flow
+- **Live session list** — the left panel polls `GET /api/sessions` every few seconds and shows all active and ended sessions with their alert counts
+- **Real-time API call log** — the right panel displays every REST call made (method, endpoint, status code, latency) so you can see exactly what your platform backend should replicate
+- **postMessage event log** — shows every alert and metric event sent by the widget via `postMessage`, demonstrating how your frontend can listen for live integrity events without a webhook
+- **Report button** — click `REPORT` on any ended session to fetch and display the full JSON integrity report
+
+### Using it as a reference
+
+The dashboard is intentionally plain HTML/JS with no framework dependencies. Read through it to understand:
+
+- How to construct the `POST /api/sessions` request from a form
+- How to embed the `embed_url` in an iframe
+- How to listen for `postMessage` events from the widget
+- How to poll session status and display live metrics
+- How to fetch and render the final integrity report
+
+> **Note:** The dashboard is a development and demo tool. It connects directly to `http://localhost:8000` and is not intended for production use as-is.
 
 ---
 
