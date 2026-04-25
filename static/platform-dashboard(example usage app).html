@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ProctorWatch — Platform Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600;700&family=IBM+Plex+Sans+Condensed:wght@300;400;600;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#04070a;
+  --bg2:#060b10;
+  --panel:#080e15;
+  --panel2:#0b1219;
+  --border:#111d2a;
+  --border2:#1a2d40;
+  --amber:#e8a020;
+  --amber-lo:rgba(232,160,32,0.07);
+  --amber-md:rgba(232,160,32,0.15);
+  --green:#00d46e;
+  --green-lo:rgba(0,212,110,0.07);
+  --red:#f04040;
+  --red-lo:rgba(240,64,64,0.07);
+  --blue:#3a8eff;
+  --blue-lo:rgba(58,142,255,0.07);
+  --cyan:#00c8d4;
+  --cyan-lo:rgba(0,200,212,0.07);
+  --purple:#a060ff;
+  --purple-lo:rgba(160,96,255,0.07);
+  --text:#a8bdd0;
+  --text-dim:#2e4257;
+  --text-mid:#5a7890;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans Condensed',sans-serif;
+}
+
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px;overflow:hidden}
+
+/* scanlines */
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9998;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.05) 3px,rgba(0,0,0,0.05) 4px)}
+
+/* ── LAYOUT ── */
+#app{display:grid;grid-template-rows:46px 1fr 28px;grid-template-columns:320px 1fr 300px;height:100vh;gap:1px;background:var(--border)}
+
+/* ── HEADER ── */
+header{
+  grid-column:1/-1;background:var(--panel);
+  display:flex;align-items:center;padding:0 18px;gap:16px;
+  border-bottom:1px solid var(--border2)
+}
+.logo{font-family:var(--sans);font-weight:700;font-size:13px;letter-spacing:0.16em;text-transform:uppercase;color:var(--amber)}
+.logo sup{font-size:7px;color:var(--text-dim);vertical-align:super;letter-spacing:0}
+.logo-sub{font-size:9px;color:var(--text-dim);letter-spacing:0.1em;text-transform:uppercase}
+.sep{width:1px;height:20px;background:var(--border2)}
+.h-pill{
+  display:flex;align-items:center;gap:6px;
+  font-size:9px;color:var(--text-mid);letter-spacing:0.08em;
+  padding:4px 10px;border:1px solid var(--border2);text-transform:uppercase
+}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--text-dim)}
+.dot.live{background:var(--green);animation:blink 1.4s ease infinite}
+.dot.dead{background:var(--red)}
+.dot.warn{background:var(--amber);animation:blink 0.8s ease infinite}
+@keyframes blink{50%{opacity:0.2}}
+.h-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+#server-url{
+  background:var(--bg2);border:1px solid var(--border2);
+  color:var(--amber);font-family:var(--mono);font-size:9px;
+  padding:4px 8px;width:200px;outline:none;letter-spacing:0.05em
+}
+#server-url::placeholder{color:var(--text-dim)}
+.btn-sm{
+  font-family:var(--mono);font-size:9px;letter-spacing:0.1em;
+  padding:4px 12px;border:1px solid;cursor:pointer;text-transform:uppercase;
+  transition:all 0.12s
+}
+.btn-primary{border-color:var(--amber);color:var(--amber);background:var(--amber-lo)}
+.btn-primary:hover{background:var(--amber);color:var(--bg)}
+.btn-danger{border-color:var(--red);color:var(--red);background:var(--red-lo)}
+.btn-danger:hover{background:var(--red);color:var(--bg)}
+.btn-neutral{border-color:var(--border2);color:var(--text-mid);background:transparent}
+.btn-neutral:hover{border-color:var(--text-mid);color:var(--text)}
+.btn-green{border-color:var(--green);color:var(--green);background:var(--green-lo)}
+.btn-green:hover{background:var(--green);color:var(--bg)}
+.btn-blue{border-color:var(--blue);color:var(--blue);background:var(--blue-lo)}
+.btn-blue:hover{background:var(--blue);color:var(--bg)}
+.btn-sm:disabled{opacity:0.3;cursor:not-allowed;pointer-events:none}
+
+/* ── LEFT PANEL (session management) ── */
+#left{background:var(--panel);display:flex;flex-direction:column;overflow:hidden}
+.sec{border-bottom:1px solid var(--border);padding:14px 16px}
+.sec-title{
+  font-size:8px;letter-spacing:0.22em;text-transform:uppercase;color:var(--text-dim);
+  margin-bottom:12px;display:flex;align-items:center;gap:8px
+}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.sec-badge{
+  padding:1px 5px;font-size:7px;letter-spacing:0.1em;
+  background:var(--amber-lo);border:1px solid rgba(232,160,32,0.25);color:var(--amber)
+}
+
+/* form fields */
+.frow{margin-bottom:8px}
+.flabel{font-size:8px;color:var(--text-dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px}
+.finput{
+  width:100%;background:var(--bg2);border:1px solid var(--border2);
+  color:var(--text);font-family:var(--mono);font-size:11px;
+  padding:5px 8px;outline:none;transition:border-color 0.15s
+}
+.finput:focus{border-color:var(--amber)}
+.finput::placeholder{color:var(--text-dim)}
+.frow2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+
+/* session list */
+#session-list{flex:1;overflow-y:auto}
+#session-list::-webkit-scrollbar{width:2px}
+#session-list::-webkit-scrollbar-thumb{background:var(--border2)}
+.sitem{
+  padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;
+  transition:background 0.12s;position:relative
+}
+.sitem:hover{background:var(--panel2)}
+.sitem.active{background:var(--amber-md);border-left:2px solid var(--amber)}
+.si-name{font-size:11px;color:var(--text);margin-bottom:2px}
+.si-meta{font-size:9px;color:var(--text-dim);display:flex;gap:10px;align-items:center}
+.status-badge{
+  font-size:7px;letter-spacing:0.1em;padding:1px 5px;text-transform:uppercase;border:1px solid;
+  font-weight:600
+}
+.sb-waiting{color:var(--text-mid);border-color:var(--border2)}
+.sb-connected{color:var(--cyan);border-color:rgba(0,200,212,0.3)}
+.sb-active{color:var(--green);border-color:rgba(0,212,110,0.3)}
+.sb-ended{color:var(--text-dim);border-color:var(--border)}
+.sb-disconnected{color:var(--red);border-color:rgba(240,64,64,0.3)}
+.sb-calibrating{color:var(--amber);border-color:rgba(232,160,32,0.3)}
+.sitem-del{
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  font-size:9px;color:var(--text-dim);cursor:pointer;padding:2px 5px;display:none
+}
+.sitem:hover .sitem-del{display:block}
+.empty-list{padding:20px 16px;text-align:center;font-size:10px;color:var(--text-dim)}
+
+/* ── CENTER (iframe/viewer) ── */
+#center{background:var(--bg2);display:flex;flex-direction:column;overflow:hidden}
+.center-header{
+  background:var(--panel);border-bottom:1px solid var(--border);
+  padding:8px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0
+}
+.ch-title{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--text);letter-spacing:0.05em;flex:1}
+.session-tag{
+  font-size:9px;color:var(--amber);padding:2px 8px;
+  border:1px solid rgba(232,160,32,0.3);background:var(--amber-lo)
+}
+
+#iframe-wrap{flex:1;position:relative;overflow:hidden}
+#proctor-iframe{width:100%;height:100%;border:none;display:block}
+
+.no-session-placeholder{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;text-align:center;padding:40px
+}
+.placeholder-icon{
+  font-size:32px;opacity:0.15;margin-bottom:8px;letter-spacing:0.2em;
+  font-family:var(--sans);font-weight:700;color:var(--amber)
+}
+.placeholder-text{font-size:11px;color:var(--text-dim);line-height:1.7;max-width:320px}
+.placeholder-hint{font-size:9px;color:var(--text-dim);letter-spacing:0.05em}
+
+/* ── RIGHT PANEL ── */
+#right{background:var(--panel);display:flex;flex-direction:column;overflow:hidden;border-left:1px solid var(--border)}
+
+/* api log */
+#api-log{flex:1;overflow-y:auto;font-size:9px}
+#api-log::-webkit-scrollbar{width:2px}
+#api-log::-webkit-scrollbar-thumb{background:var(--border2)}
+.api-entry{
+  padding:8px 14px;border-bottom:1px solid var(--border);animation:slideIn 0.18s ease
+}
+@keyframes slideIn{from{opacity:0;transform:translateX(8px)}}
+.api-method{
+  display:inline-block;font-size:7px;padding:1px 5px;font-weight:700;letter-spacing:0.12em;
+  margin-right:6px;border:1px solid
+}
+.m-post{color:#f0b040;border-color:rgba(240,176,64,0.35);background:rgba(240,176,64,0.08)}
+.m-get{color:var(--green);border-color:rgba(0,212,110,0.35);background:var(--green-lo)}
+.m-ws{color:var(--purple);border-color:rgba(160,96,255,0.35);background:var(--purple-lo)}
+.m-event{color:var(--cyan);border-color:rgba(0,200,212,0.35);background:var(--cyan-lo)}
+.api-path{color:var(--text-mid);font-size:9px}
+.api-status{float:right;font-size:7px;letter-spacing:0.05em}
+.api-status.ok{color:var(--green)}
+.api-status.err{color:var(--red)}
+.api-body{
+  margin-top:5px;color:var(--text-dim);font-size:8px;line-height:1.5;
+  max-height:80px;overflow:hidden;position:relative
+}
+.api-body pre{white-space:pre-wrap;word-break:break-all}
+.api-time{color:var(--text-dim);font-size:7px;margin-top:3px}
+.api-expand{
+  font-size:7px;color:var(--amber);cursor:pointer;margin-top:2px;display:inline-block
+}
+
+/* postMessage log */
+#pm-log{height:160px;overflow-y:auto;border-top:1px solid var(--border)}
+#pm-log::-webkit-scrollbar{width:2px}
+#pm-log::-webkit-scrollbar-thumb{background:var(--border2)}
+.pm-entry{padding:7px 14px;border-bottom:1px solid var(--border);animation:slideIn 0.18s ease}
+.pm-type{font-size:8px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase}
+.pm-alert{color:var(--amber)}
+.pm-ended{color:var(--green)}
+.pm-body{font-size:8px;color:var(--text-dim);margin-top:2px;line-height:1.4}
+
+/* ── STATUS BAR ── */
+#statusbar{
+  grid-column:1/-1;background:var(--panel);border-top:1px solid var(--border);
+  display:flex;align-items:center;padding:0 16px;gap:20px;font-size:9px;color:var(--text-dim)
+}
+.sb-item{display:flex;align-items:center;gap:5px}
+.sb-val{color:var(--amber)}
+#health-label{color:var(--text-dim)}
+#health-label.ok{color:var(--green)}
+#health-label.fail{color:var(--red)}
+
+/* ── Session status panel ── */
+#session-status{background:var(--panel2);border:1px solid var(--border2);padding:12px 14px;margin:0;flex-shrink:0}
+.ss-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.ss-label{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em}
+.ss-val{font-size:11px;color:var(--text);font-weight:600}
+.ss-val.green{color:var(--green)}
+.ss-val.amber{color:var(--amber)}
+.ss-val.red{color:var(--red)}
+.ss-val.dim{color:var(--text-dim)}
+.ss-divider{height:1px;background:var(--border);margin:8px 0}
+.action-row{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+
+/* verdict colors */
+.verdict-PASS{color:var(--green)}
+.verdict-REVIEW{color:var(--amber)}
+.verdict-FAIL{color:var(--red)}
+
+/* tooltip */
+.tooltip{position:relative}
+.tooltip:hover::after{
+  content:attr(data-tip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);
+  background:var(--panel2);border:1px solid var(--border2);padding:3px 7px;
+  font-size:8px;color:var(--text);white-space:nowrap;pointer-events:none;z-index:100;margin-bottom:4px
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="logo">ProctorWatch<sup>®</sup></div>
+  <div class="sep"></div>
+  <div class="logo-sub">Platform Dashboard</div>
+  <div class="h-pill"><span class="dot live" id="health-dot"></span><span id="health-label">CONNECTING</span></div>
+  <div class="h-pill" id="active-pill"><span class="dot" id="active-dot"></span><span id="active-count">0</span> ACTIVE</div>
+  <div class="h-right">
+    <input id="server-url" class="finput" style="width:200px" value="http://localhost:8000" placeholder="http://localhost:8000"/>
+    <button class="btn-sm btn-primary" onclick="checkHealth()">CONNECT</button>
+  </div>
+</header>
+
+<!-- ── LEFT: Session Management ── -->
+<div id="left">
+  <!-- Create Session Form -->
+  <div class="sec">
+    <div class="sec-title">Create Session <span class="sec-badge">POST /api/sessions</span></div>
+    <div class="frow">
+      <div class="flabel">Candidate Name</div>
+      <input id="f-name" class="finput" placeholder="Jane Smith" value="Alice Johnson"/>
+    </div>
+    <div class="frow2">
+      <div class="frow" style="margin:0">
+        <div class="flabel">Candidate ID</div>
+        <input id="f-cid" class="finput" placeholder="cand_001" value="cand_001"/>
+      </div>
+      <div class="frow" style="margin:0">
+        <div class="flabel">Exam ID</div>
+        <input id="f-eid" class="finput" placeholder="exam_01" value="midterm_2025"/>
+      </div>
+    </div>
+    <div class="frow">
+      <div class="flabel">Exam Label</div>
+      <input id="f-elabel" class="finput" placeholder="Midterm Computer Science" value="Midterm — Computer Science"/>
+    </div>
+    <div class="frow">
+      <div class="flabel">Webhook URL <span style="color:var(--text-dim);font-size:7px">(optional)</span></div>
+      <input id="f-webhook" class="finput" placeholder="https://your-platform.com/webhook" value=""/>
+    </div>
+    <button class="btn-sm btn-primary" style="width:100%;margin-top:4px" onclick="createSession()">▶ CREATE SESSION</button>
+  </div>
+
+  <!-- Session List -->
+  <div class="sec" style="padding-bottom:8px;flex-shrink:0">
+    <div class="sec-title" style="margin-bottom:0">
+      Sessions
+      <span class="sec-badge" id="session-count-badge">0</span>
+      <button class="btn-sm btn-neutral" style="padding:2px 7px;font-size:7px;margin-left:auto" onclick="loadSessions()">↻ REFRESH</button>
+    </div>
+  </div>
+  <div id="session-list">
+    <div class="empty-list">No sessions yet.<br/>Create one above.</div>
+  </div>
+</div>
+
+<!-- ── CENTER: Proctor Widget Embed ── -->
+<div id="center">
+  <div class="center-header">
+    <span class="ch-title" id="iframe-title">No Active Session</span>
+    <span class="session-tag" id="session-tag" style="display:none"></span>
+    <button class="btn-sm btn-neutral" id="btn-refresh-status" style="display:none" onclick="refreshStatus()">↻ STATUS</button>
+    <button class="btn-sm btn-danger" id="btn-end-api" style="display:none" onclick="endSessionApi()">■ END SESSION</button>
+    <button class="btn-sm btn-green" id="btn-report" style="display:none" onclick="openReport()">⬇ REPORT</button>
+  </div>
+
+  <!-- Placeholder when no session -->
+  <div class="no-session-placeholder" id="no-session">
+    <div class="placeholder-icon">▣ PROCTOR WATCH</div>
+    <div class="placeholder-text">
+      This dashboard simulates a <strong style="color:var(--amber)">Platform LMS</strong> communicating with the ProctorWatch server via its REST API and WebSocket.
+    </div>
+    <div class="placeholder-text" style="margin-top:8px">
+      ① Fill in candidate details on the left<br/>
+      ② Click <strong style="color:var(--amber)">Create Session</strong><br/>
+      ③ The ProctorWatch widget loads here in an iframe<br/>
+      ④ All API calls log in real-time on the right
+    </div>
+    <div class="placeholder-hint" style="margin-top:16px">Make sure server is running at localhost:8000</div>
+  </div>
+
+  <!-- Session status + iframe when active -->
+  <div id="active-session-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+    <!-- Mini status panel -->
+    <div id="session-status">
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="ss-row" style="flex:1;min-width:100px">
+          <span class="ss-label">Status</span>
+          <span class="ss-val amber" id="ss-status">—</span>
+        </div>
+        <div class="ss-row" style="flex:1;min-width:100px">
+          <span class="ss-label">Alerts</span>
+          <span class="ss-val" id="ss-alerts">0</span>
+        </div>
+        <div class="ss-row" style="flex:1;min-width:120px">
+          <span class="ss-label">Attention</span>
+          <span class="ss-val green" id="ss-attention">—</span>
+        </div>
+        <div class="ss-row" style="flex:1;min-width:120px">
+          <span class="ss-label">Identity</span>
+          <span class="ss-val" id="ss-identity">—</span>
+        </div>
+      </div>
+    </div>
+    <!-- iframe -->
+    <div id="iframe-wrap" style="flex:1;overflow:hidden">
+      <iframe id="proctor-iframe" allow="camera; microphone" src="about:blank"></iframe>
+    </div>
+  </div>
+</div>
+
+<!-- ── RIGHT: API Log + postMessage ── -->
+<div id="right">
+  <!-- API Call Log -->
+  <div class="sec" style="flex-shrink:0;padding-bottom:8px">
+    <div class="sec-title" style="margin-bottom:0">
+      API Call Log
+      <button class="btn-sm btn-neutral" style="padding:2px 7px;font-size:7px;margin-left:auto" onclick="clearApiLog()">CLR</button>
+    </div>
+  </div>
+  <div id="api-log" style="flex:1">
+    <div class="empty-list">API calls will appear here.</div>
+  </div>
+
+  <!-- postMessage Events -->
+  <div class="sec" style="flex-shrink:0;padding-bottom:8px;border-top:1px solid var(--border2)">
+    <div class="sec-title" style="margin-bottom:0">
+      postMessage Events
+      <span class="sec-badge" id="pm-badge">iframe → platform</span>
+    </div>
+  </div>
+  <div id="pm-log">
+    <div class="empty-list" id="pm-empty">Waiting for iframe events…</div>
+  </div>
+</div>
+
+<!-- ── STATUS BAR ── -->
+<div id="statusbar">
+  <div class="sb-item">⬡ <span class="sb-val" id="sb-server">localhost:8000</span></div>
+  <div class="sb-item">SESSIONS: <span class="sb-val" id="sb-total">0</span></div>
+  <div class="sb-item">ACTIVE: <span class="sb-val" id="sb-active">0</span></div>
+  <div class="sb-item">SELECTED: <span class="sb-val" id="sb-selected">none</span></div>
+  <div class="sb-item" style="margin-left:auto;color:var(--text-dim)" id="sb-time">—</div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let serverBase = 'http://localhost:8000';
+let sessions   = [];
+let activeId   = null;
+let pollTimer  = null;
+let apiLogExpanded = {};
+
+// ── Init ──────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  serverBase = document.getElementById('server-url').value.replace(/\/$/, '');
+  setInterval(() => {
+    const now = new Date();
+    document.getElementById('sb-time').textContent =
+      now.toTimeString().slice(0,8);
+  }, 1000);
+  checkHealth();
+  loadSessions();
+  // Listen for postMessage from iframe
+  window.addEventListener('message', handlePostMessage);
+  // Auto-poll sessions every 5s
+  setInterval(() => { loadSessions(); if (activeId) refreshStatus(); }, 5000);
+});
+
+document.getElementById('server-url').addEventListener('change', e => {
+  serverBase = e.target.value.replace(/\/$/, '');
+  document.getElementById('sb-server').textContent = serverBase.replace('http://','').replace('https://','');
+  checkHealth();
+});
+
+// ── HTTP helper ───────────────────────────────────────────────────────────
+async function api(method, path, body = null) {
+  const url = serverBase + path;
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const t0 = Date.now();
+  try {
+    const r   = await fetch(url, opts);
+    const ms  = Date.now() - t0;
+    const json = await r.json().catch(() => null);
+    logApi(method, path, r.status, json, ms);
+    return { ok: r.ok, status: r.status, data: json };
+  } catch (e) {
+    logApi(method, path, 0, { error: e.message }, Date.now() - t0);
+    return { ok: false, status: 0, data: null };
+  }
+}
+
+// ── Health check ──────────────────────────────────────────────────────────
+async function checkHealth() {
+  const res = await api('GET', '/health');
+  const dot = document.getElementById('health-dot');
+  const lbl = document.getElementById('health-label');
+  const adot = document.getElementById('active-dot');
+  const acnt = document.getElementById('active-count');
+
+  if (res.ok && res.data) {
+    dot.className = 'dot live';
+    lbl.textContent = 'ONLINE';
+    lbl.className = 'ok';
+    const active = res.data.active_sessions || 0;
+    acnt.textContent = active;
+    adot.className = active > 0 ? 'dot warn' : 'dot';
+    document.getElementById('sb-active').textContent = active;
+    document.getElementById('sb-total').textContent  = res.data.total_sessions || 0;
+  } else {
+    dot.className = 'dot dead';
+    lbl.textContent = 'OFFLINE';
+    lbl.className = 'fail';
+  }
+}
+
+// ── Create session ────────────────────────────────────────────────────────
+async function createSession() {
+  const body = {
+    candidate_name: document.getElementById('f-name').value   || 'Candidate',
+    candidate_id:   document.getElementById('f-cid').value    || null,
+    exam_id:        document.getElementById('f-eid').value     || 'default',
+    exam_label:     document.getElementById('f-elabel').value  || null,
+    webhook_url:    document.getElementById('f-webhook').value || null,
+    metadata: { created_by: 'platform_dashboard', browser: navigator.userAgent.slice(0,40) }
+  };
+  const res = await api('POST', '/api/sessions', body);
+  if (res.ok && res.data) {
+    await loadSessions();
+    selectSession(res.data.session_id);
+  }
+}
+
+// ── Load sessions ─────────────────────────────────────────────────────────
+async function loadSessions() {
+  const res = await api('GET', '/api/sessions');
+  if (!res.ok || !res.data) return;
+  sessions = res.data;
+  renderSessionList();
+  document.getElementById('sb-total').textContent = sessions.length;
+  document.getElementById('session-count-badge').textContent = sessions.length;
+}
+
+function renderSessionList() {
+  const el = document.getElementById('session-list');
+  if (!sessions.length) {
+    el.innerHTML = '<div class="empty-list">No sessions yet.<br/>Create one above.</div>';
+    return;
+  }
+  el.innerHTML = sessions.slice().reverse().map(s => {
+    const cls  = activeId === s.session_id ? 'sitem active' : 'sitem';
+    const sbCls = 'status-badge sb-' + (s.status || 'waiting');
+    const alerts = s.alert_count > 0 ? `<span style="color:var(--amber)">${s.alert_count}⚠</span>` : '';
+    return `<div class="${cls}" onclick="selectSession('${s.session_id}')">
+      <div class="si-name">${esc(s.candidate_name || 'Candidate')}</div>
+      <div class="si-meta">
+        <span class="${sbCls}">${s.status || 'waiting'}</span>
+        <span>${esc(s.exam_id)}</span>
+        ${alerts}
+        <span style="margin-left:auto;font-size:8px;color:var(--text-dim)">${s.session_id}</span>
+      </div>
+      <span class="sitem-del" onclick="event.stopPropagation()" title="Remove from list (does not end session)" style="color:var(--text-dim);font-size:8px">✕</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Select / open session ─────────────────────────────────────────────────
+async function selectSession(sid) {
+  activeId = sid;
+  renderSessionList();
+
+  document.getElementById('no-session').style.display = 'none';
+  const asv = document.getElementById('active-session-view');
+  asv.style.display = 'flex';
+
+  document.getElementById('session-tag').textContent = sid;
+  document.getElementById('session-tag').style.display = '';
+  document.getElementById('btn-refresh-status').style.display = '';
+  document.getElementById('sb-selected').textContent = sid;
+
+  // Load the proctor widget in iframe
+  const iframeUrl = serverBase + '/?session_id=' + sid;
+  document.getElementById('proctor-iframe').src = iframeUrl;
+  document.getElementById('iframe-title').textContent = 'Proctor Widget — ' + sid;
+
+  logApiNote('WS', '/ws/' + sid, 'Widget loaded in iframe — WebSocket auto-connects');
+
+  await refreshStatus();
+}
+
+// ── Refresh session status ────────────────────────────────────────────────
+async function refreshStatus() {
+  if (!activeId) return;
+  const res = await api('GET', '/api/sessions/' + activeId);
+  if (!res.ok || !res.data) return;
+  const d = res.data;
+
+  document.getElementById('ss-status').textContent = d.status.toUpperCase();
+  document.getElementById('ss-status').className = 'ss-val ' + (
+    d.status === 'active' ? 'green' : d.status === 'ended' ? 'dim' : 'amber');
+  document.getElementById('ss-alerts').textContent = d.alert_count;
+
+  const cs = d.current_state || {};
+  document.getElementById('ss-attention').textContent = cs.attention || '—';
+  document.getElementById('ss-attention').className = 'ss-val ' + (
+    cs.attention === 'ATTENTIVE' ? 'green' : cs.attention === 'INATTENTIVE' ? 'red' : '');
+  document.getElementById('ss-identity').textContent = cs.identity || '—';
+
+  const ended = d.status === 'ended';
+  document.getElementById('btn-end-api').style.display  = ended ? 'none' : '';
+  document.getElementById('btn-report').style.display   = '';
+  document.getElementById('btn-iframe-title') && null;
+
+  // update list item
+  const idx = sessions.findIndex(s => s.session_id === activeId);
+  if (idx >= 0) {
+    sessions[idx].status      = d.status;
+    sessions[idx].alert_count = d.alert_count;
+    renderSessionList();
+  }
+}
+
+// ── End session (API) ─────────────────────────────────────────────────────
+async function endSessionApi() {
+  if (!activeId) return;
+  if (!confirm('End session ' + activeId + ' via API?\n(This simulates the platform calling POST /api/sessions/{id}/end)')) return;
+  await api('POST', '/api/sessions/' + activeId + '/end');
+  await refreshStatus();
+}
+
+// ── Open report ───────────────────────────────────────────────────────────
+async function openReport() {
+  if (!activeId) return;
+  const res = await api('GET', '/api/sessions/' + activeId + '/report');
+  if (res.ok && res.data) {
+    // Show report in new tab with pretty print
+    const w = window.open('', '_blank');
+    w.document.write(`<html><head><title>Report ${activeId}</title>
+      <style>body{font-family:monospace;background:#04070a;color:#a8bdd0;padding:24px;white-space:pre-wrap}
+      .v-PASS{color:#00d46e}.v-REVIEW{color:#e8a020}.v-FAIL{color:#f04040}
+      h2{color:#e8a020;margin-bottom:16px;font-family:sans-serif;font-size:14px;letter-spacing:0.1em}
+      </style></head><body>
+      <h2>PROCTORWATCH INTEGRITY REPORT — ${activeId}</h2>
+      <pre>${esc(JSON.stringify(res.data, null, 2))}</pre></body></html>`);
+  }
+}
+
+// ── postMessage handler ───────────────────────────────────────────────────
+function handlePostMessage(e) {
+  const d = e.data;
+  if (!d || !d.type) return;
+  if (d.type === 'proctor_alert' || d.type === 'proctor_session_ended') {
+    const pmLog = document.getElementById('pm-log');
+    const empty = document.getElementById('pm-empty');
+    if (empty) empty.remove();
+
+    const cls = d.type === 'proctor_alert' ? 'pm-type pm-alert' : 'pm-type pm-ended';
+    const label = d.type === 'proctor_alert'
+      ? `⚠ ${d.event} [${d.severity}]`
+      : `✓ SESSION ENDED — ${d.verdict?.result || ''}`;
+    const body = d.type === 'proctor_alert'
+      ? d.message || ''
+      : `Score ${d.verdict?.score}/100 · Report: ${d.reportUrl}`;
+
+    const div = document.createElement('div');
+    div.className = 'pm-entry';
+    div.innerHTML = `<div class="${cls}">${label}</div><div class="pm-body">${esc(body)}</div>`;
+    pmLog.insertBefore(div, pmLog.firstChild);
+
+    // Also log in api-log as a WS event
+    logApiNote('EVENT', d.type, body);
+    checkHealth();
+  }
+}
+
+// ── API Log ───────────────────────────────────────────────────────────────
+let apiLogCount = 0;
+function logApi(method, path, status, body, ms) {
+  const el = document.getElementById('api-log');
+  const empty = el.querySelector('.empty-list');
+  if (empty) empty.remove();
+
+  const id   = 'api-' + (++apiLogCount);
+  const ok   = status >= 200 && status < 300;
+  const mCls = method === 'POST' ? 'm-post' : 'm-get';
+  const bodyStr = body ? JSON.stringify(body, null, 2) : '';
+  const shortBody = bodyStr.length > 120 ? bodyStr.slice(0, 120) + '…' : bodyStr;
+
+  const div = document.createElement('div');
+  div.className = 'api-entry';
+  div.id = id;
+  div.innerHTML = `
+    <div>
+      <span class="api-method ${mCls}">${method}</span>
+      <span class="api-path">${esc(path)}</span>
+      <span class="api-status ${ok?'ok':'err'}">${status || 'ERR'} ${ms}ms</span>
+    </div>
+    ${bodyStr ? `<div class="api-body"><pre id="${id}-body">${esc(shortBody)}</pre></div>
+    ${bodyStr.length > 120 ? `<span class="api-expand" onclick="toggleExpand('${id}',\`${btoa(unescape(encodeURIComponent(bodyStr)))}\`)">▸ expand</span>` : ''}` : ''}
+    <div class="api-time">${new Date().toTimeString().slice(0,8)}</div>`;
+  el.insertBefore(div, el.firstChild);
+
+  // Keep max 80 entries
+  while (el.children.length > 80) el.removeChild(el.lastChild);
+}
+
+function logApiNote(method, path, msg) {
+  const el = document.getElementById('api-log');
+  const empty = el.querySelector('.empty-list');
+  if (empty) empty.remove();
+  const mCls = method === 'WS' ? 'm-ws' : 'm-event';
+  const div = document.createElement('div');
+  div.className = 'api-entry';
+  div.innerHTML = `
+    <div>
+      <span class="api-method ${mCls}">${method}</span>
+      <span class="api-path">${esc(path)}</span>
+    </div>
+    <div class="api-body" style="max-height:none">${esc(msg)}</div>
+    <div class="api-time">${new Date().toTimeString().slice(0,8)}</div>`;
+  el.insertBefore(div, el.firstChild);
+}
+
+function toggleExpand(id, b64) {
+  const pre = document.getElementById(id + '-body');
+  if (!pre) return;
+  try {
+    pre.textContent = decodeURIComponent(escape(atob(b64)));
+    pre.closest('.api-entry').querySelector('.api-expand').remove();
+    pre.closest('.api-body').style.maxHeight = 'none';
+  } catch (e) {}
+}
+
+function clearApiLog() {
+  document.getElementById('api-log').innerHTML = '<div class="empty-list">Log cleared.</div>';
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

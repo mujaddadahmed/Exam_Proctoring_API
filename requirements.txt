@@ -1,0 +1,19 @@
+# FastAPI and Web Server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+websockets==12.0
+
+# Optional: For ArcFace face recognition
+insightface==0.7.3
+onnxruntime==1.16.3
+
+# For async operations
+aiofiles==23.2.1
+
+# Existing project dependencies
+
+mediapipe==0.10.9
+sounddevice==0.4.6
+opencv-python==4.9.0.80
+numpy==1.26.4

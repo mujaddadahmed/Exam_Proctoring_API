@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ProctorWatch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600&family=IBM+Plex+Sans+Condensed:wght@300;600;700&display=swap" rel="stylesheet" />
+<style>
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #070a0e;
+  --bg2:      #0b0f15;
+  --panel:    #0e1218;
+  --border:   #18212e;
+  --border2:  #243040;
+  --amber:    #e8a020;
+  --amber-lo: rgba(232,160,32,0.08);
+  --green:    #00d46e;
+  --green-lo: rgba(0,212,110,0.08);
+  --red:      #f04040;
+  --red-lo:   rgba(240,64,64,0.08);
+  --blue:     #3a8eff;
+  --blue-lo:  rgba(58,142,255,0.08);
+  --text:     #b8c4d4;
+  --text-dim: #3e4f62;
+  --text-mid: #7888a0;
+  --mono:     'IBM Plex Mono', monospace;
+  --sans:     'IBM Plex Sans Condensed', sans-serif;
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 12px; overflow: hidden; }
+
+/* scanlines */
+body::after {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+  background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px);
+}
+
+/* ── App grid ── */
+#app {
+  display: grid;
+  grid-template-rows: 44px 1fr 32px;
+  grid-template-columns: 1fr 300px;
+  height: 100vh;
+  gap: 1px;
+  background: var(--border);
+}
+
+/* ── Header ── */
+header {
+  grid-column: 1 / -1;
+  background: var(--panel);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.wordmark {
+  font-family: var(--sans); font-weight: 700; font-size: 15px;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber);
+}
+.wordmark sup { font-size: 8px; color: var(--text-dim); vertical-align: super; letter-spacing: 0; }
+.h-meta { font-size: 10px; color: var(--text-dim); display: flex; gap: 18px; margin-left: auto; align-items: center; }
+.h-meta b { color: var(--text-mid); }
+.h-meta span { color: var(--amber); }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); display: inline-block; margin-right: 5px; }
+.dot.on { background: var(--green); animation: blink 1.4s ease infinite; }
+.dot.warn { background: var(--red); animation: blink 0.7s ease infinite; }
+@keyframes blink { 50% { opacity: 0.25; } }
+
+/* END SESSION button */
+#btn-end {
+  margin-left: 16px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  padding: 5px 14px; border: 1px solid var(--red); color: var(--red);
+  background: var(--red-lo); cursor: pointer; text-transform: uppercase;
+  transition: all 0.15s; display: none;
+}
+#btn-end:hover { background: var(--red); color: var(--bg); }
+
+/* ── Main (video side) ── */
+main {
+  background: var(--bg2);
+  display: flex; flex-direction: column;
+  position: relative; overflow: hidden;
+}
+
+#video-wrap {
+  flex: 1; position: relative; background: #000; overflow: hidden;
+}
+#canvas-out {
+  width: 100%; height: 100%; object-fit: contain; display: block;
+}
+
+/* corner brackets */
+.cb { position: absolute; width: 20px; height: 20px; border-color: var(--amber); border-style: solid; opacity: 0.5; pointer-events: none; z-index: 5; }
+.cb.tl { top: 10px; left: 10px; border-width: 1px 0 0 1px; }
+.cb.tr { top: 10px; right: 10px; border-width: 1px 1px 0 0; }
+.cb.bl { bottom: 10px; left: 10px; border-width: 0 0 1px 1px; }
+.cb.br { bottom: 10px; right: 10px; border-width: 0 1px 1px 0; }
+
+/* gaze crosshair */
+#gaze {
+  position: absolute; width: 12px; height: 12px;
+  transform: translate(-50%,-50%); z-index: 6; pointer-events: none;
+  transition: left 0.1s, top 0.1s;
+}
+#gaze::before, #gaze::after { content: ''; position: absolute; background: var(--amber); opacity: 0.7; }
+#gaze::before { top: 50%; left: 0; right: 0; height: 1px; transform: translateY(-50%); }
+#gaze::after  { left: 50%; top: 0; bottom: 0; width: 1px; transform: translateX(-50%); }
+
+/* overlay badges */
+#overlay {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: 12px 14px; display: flex; gap: 8px;
+  z-index: 5; pointer-events: none;
+}
+.badge {
+  font-size: 9px; letter-spacing: 0.1em; padding: 3px 9px;
+  text-transform: uppercase; font-weight: 600; border: 1px solid;
+}
+.b-attn  { color: var(--green); border-color: rgba(0,212,110,0.4); background: var(--green-lo); }
+.b-attn.bad { color: var(--red); border-color: rgba(240,64,64,0.4); background: var(--red-lo); animation: blink 0.8s infinite; }
+.b-id    { color: var(--blue);  border-color: rgba(58,142,255,0.4); background: var(--blue-lo); }
+.b-sound { color: var(--text-dim); border-color: var(--border2); background: transparent; }
+.b-sound.on { color: var(--amber); border-color: rgba(232,160,32,0.4); background: var(--amber-lo); animation: blink 0.9s infinite; }
+
+/* ── Status bar ── */
+#status-bar {
+  grid-column: 1 / -1;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 16px; gap: 20px;
+  font-size: 10px; color: var(--text-dim);
+}
+.si { display: flex; align-items: center; gap: 5px; }
+.sv { color: var(--amber); }
+
+/* ── Sidebar ── */
+aside {
+  background: var(--panel);
+  display: flex; flex-direction: column;
+  overflow: hidden; border-left: 1px solid var(--border);
+}
+.sec { border-bottom: 1px solid var(--border); padding: 12px 14px; }
+.sec-title {
+  font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--text-dim); margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.sec-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* Big attention */
+#attn-big {
+  font-family: var(--sans); font-weight: 700; font-size: 26px;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--green); transition: color 0.3s; line-height: 1; margin-bottom: 3px;
+}
+#attn-sub { font-size: 9px; color: var(--text-dim); }
+
+/* Metric rows */
+.mrow { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.ml { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.mv { font-size: 12px; color: var(--amber); font-weight: 600; }
+.mv.g { color: var(--green); } .mv.r { color: var(--red); }
+.bar  { height: 2px; background: var(--border); margin-top: 2px; overflow: hidden; }
+.barf { height: 100%; background: var(--amber); transition: width 0.4s; }
+.barf.g { background: var(--green); } .barf.r { background: var(--red); }
+
+/* Timeline */
+#tl { width: 100%; height: 40px; display: block; }
+
+/* Alert log */
+#alog { flex: 1; overflow-y: auto; }
+#alog::-webkit-scrollbar { width: 2px; }
+#alog::-webkit-scrollbar-thumb { background: var(--border2); }
+.aitem {
+  padding: 7px 14px; border-bottom: 1px solid var(--border);
+  font-size: 10px; animation: fadein 0.2s ease;
+}
+@keyframes fadein { from { opacity: 0; transform: translateX(6px); } }
+.aitem.warning  { border-left: 2px solid var(--amber); padding-left: 12px; }
+.aitem.critical { border-left: 2px solid var(--red);   padding-left: 12px; }
+.aitem.info     { border-left: 2px solid var(--blue);  padding-left: 12px; }
+.ae { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1px; }
+.aitem.warning  .ae { color: var(--amber); }
+.aitem.critical .ae { color: var(--red); }
+.aitem.info     .ae { color: var(--blue); }
+.am { color: var(--text-mid); } .at { color: var(--text-dim); font-size: 9px; margin-top: 1px; }
+.empty { padding: 20px 14px; text-align: center; font-size: 10px; color: var(--text-dim); }
+
+/* ── Overlay screens ── */
+.screen {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(7,10,14,0.97); backdrop-filter: blur(6px);
+}
+.card {
+  width: 440px; background: var(--panel);
+  border: 1px solid var(--border2); padding: 36px;
+  position: relative;
+}
+.card::before {
+  content: ''; position: absolute; top: -1px; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--amber) 0%, transparent 70%);
+}
+.card-title { font-family: var(--sans); font-weight: 700; font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber); margin-bottom: 2px; }
+.card-sub   { font-size: 10px; color: var(--text-dim); letter-spacing: 0.05em; margin-bottom: 28px; }
+
+.steps { display: flex; gap: 6px; margin-bottom: 24px; }
+.step  { flex: 1; height: 2px; background: var(--border); }
+.step.on  { background: var(--amber); }
+.step.done { background: var(--green); }
+
+.slabel { font-size: 9px; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 14px; }
+
+/* Video preview */
+.pvid-wrap {
+  width: 100%; height: 200px; background: #000;
+  border: 1px solid var(--border); margin-bottom: 16px;
+  position: relative; overflow: hidden;
+}
+.pvid-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; transform: scaleX(-1); }
+.pvid-wrap svg   { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+.flash { animation: flash 0.15s ease; }
+@keyframes flash { 50% { opacity: 0.2; } }
+
+.progress { height: 3px; background: var(--border); margin-bottom: 16px; overflow: hidden; }
+.prog-fill { height: 100%; background: var(--amber); transition: width 0.15s; width: 0; }
+
+.msg { font-size: 11px; color: var(--text-mid); min-height: 16px; margin-bottom: 16px; }
+.msg.ok  { color: var(--green); }
+.msg.err { color: var(--red); }
+
+.btn {
+  width: 100%; padding: 10px; border: none; cursor: pointer;
+  font-family: var(--sans); font-weight: 700; font-size: 12px;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  background: var(--amber); color: var(--bg); transition: all 0.15s;
+}
+.btn:hover { filter: brightness(1.1); }
+.btn:disabled { opacity: 0.35; cursor: default; }
+
+/* ── No-session screen ── */
+#no-session-screen {
+  position: fixed; inset: 0; z-index: 300;
+  display: none; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+.ns-card { text-align: center; }
+.ns-icon { font-size: 40px; margin-bottom: 16px; opacity: 0.3; }
+.ns-title { font-family: var(--sans); font-size: 18px; font-weight: 700; color: var(--amber); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
+.ns-sub { font-size: 11px; color: var(--text-dim); line-height: 1.7; max-width: 340px; }
+.ns-sub code { color: var(--text-mid); background: var(--panel); padding: 2px 6px; }
+
+/* ── Report overlay ── */
+#report-screen {
+  position: fixed; inset: 0; z-index: 250;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(7,10,14,0.98); backdrop-filter: blur(8px);
+}
+.report-card {
+  width: 560px; max-height: 88vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border2);
+  position: relative;
+}
+.report-card::-webkit-scrollbar { width: 3px; }
+.report-card::-webkit-scrollbar-thumb { background: var(--border2); }
+.report-card::before {
+  content: ''; position: sticky; top: 0; left: 0; right: 0; height: 2px; display: block;
+  background: linear-gradient(90deg, var(--amber), transparent);
+}
+
+.rhead {
+  padding: 24px 28px 0;
+  position: sticky; top: 2px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+  z-index: 2;
+}
+.rhead-title { font-family: var(--sans); font-size: 18px; font-weight: 700; color: var(--amber); letter-spacing: 0.08em; text-transform: uppercase; }
+.rhead-meta  { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+
+.rbody { padding: 20px 28px; }
+
+.verdict-box {
+  padding: 14px 18px; margin-bottom: 20px;
+  border: 1px solid; display: flex; align-items: center; gap: 16px;
+}
+.verdict-box.PASS   { border-color: rgba(0,212,110,0.4); background: var(--green-lo); }
+.verdict-box.REVIEW { border-color: rgba(232,160,32,0.4); background: var(--amber-lo); }
+.verdict-box.FAIL   { border-color: rgba(240,64,64,0.4);  background: var(--red-lo); }
+.verdict-label { font-family: var(--sans); font-size: 24px; font-weight: 700; text-transform: uppercase; }
+.verdict-box.PASS   .verdict-label { color: var(--green); }
+.verdict-box.REVIEW .verdict-label { color: var(--amber); }
+.verdict-box.FAIL   .verdict-label { color: var(--red); }
+.verdict-score { font-size: 10px; color: var(--text-mid); }
+
+.rsec-title { font-size: 9px; color: var(--text-dim); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 10px; margin-top: 18px; border-bottom: 1px solid var(--border); padding-bottom: 5px; }
+
+.rmetric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rmetric { background: var(--bg2); padding: 10px 14px; }
+.rmetric-label { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.rmetric-val   { font-size: 18px; font-weight: 600; color: var(--amber); font-family: var(--sans); }
+.rmetric-val.g { color: var(--green); }
+.rmetric-val.r { color: var(--red); }
+
+.flag-list { list-style: none; }
+.flag-list li { font-size: 10px; color: var(--text-mid); padding: 5px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px; }
+.flag-list li::before { content: '⚠'; color: var(--amber); flex-shrink: 0; }
+
+.report-btns { display: flex; gap: 10px; margin-top: 20px; }
+.rbtn {
+  flex: 1; padding: 9px; border: none; cursor: pointer;
+  font-family: var(--sans); font-weight: 600; font-size: 11px;
+  letter-spacing: 0.12em; text-transform: uppercase; transition: all 0.15s;
+}
+.rbtn.primary   { background: var(--amber); color: var(--bg); }
+.rbtn.secondary { background: transparent; border: 1px solid var(--border2); color: var(--text-mid); }
+.rbtn:hover { filter: brightness(1.1); }
+
+.alert-tally { display: flex; gap: 8px; margin-top: 10px; }
+.tally-item { flex: 1; background: var(--bg2); padding: 8px; }
+.tally-n { font-family: var(--sans); font-size: 20px; font-weight: 700; color: var(--amber); }
+.tally-l { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 1px; }
+</style>
+</head>
+<body>
+
+<!-- No session guard -->
+<div id="no-session-screen">
+  <div class="ns-card">
+    <div class="ns-icon">🔒</div>
+    <div class="ns-title">ProctorWatch</div>
+    <div class="ns-sub">
+      This interface must be launched from your exam platform.<br><br>
+      Platform developers: create a session via<br>
+      <code>POST /api/sessions</code> and open the returned <code>embed_url</code>.
+    </div>
+  </div>
+</div>
+
+<!-- Setup overlay (registration + calibration) -->
+<div id="setup-screen" class="screen" style="display:none">
+  <div class="card">
+    <div class="card-title">ProctorWatch</div>
+    <div class="card-sub" id="setup-sub">EXAM INTEGRITY // INITIALIZING</div>
+
+    <div class="steps">
+      <div class="step on"  id="sb1"></div>
+      <div class="step"     id="sb2"></div>
+    </div>
+
+    <!-- Step 1: Face registration -->
+    <div id="s1">
+      <div class="slabel">Step 1 of 2 — Face Registration</div>
+      <div class="pvid-wrap" id="pw1">
+        <video id="pv1" autoplay muted playsinline></video>
+        <svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+          <polyline points="18,45 18,18 45,18"   fill="none" stroke="rgba(232,160,32,0.7)" stroke-width="1.5"/>
+          <polyline points="355,18 382,18 382,45" fill="none" stroke="rgba(232,160,32,0.7)" stroke-width="1.5"/>
+          <polyline points="18,155 18,182 45,182" fill="none" stroke="rgba(232,160,32,0.7)" stroke-width="1.5"/>
+          <polyline points="355,182 382,182 382,155" fill="none" stroke="rgba(232,160,32,0.7)" stroke-width="1.5"/>
+          <ellipse cx="200" cy="100" rx="80" ry="88" fill="none" stroke="rgba(232,160,32,0.3)" stroke-width="1" stroke-dasharray="4 3"/>
+        </svg>
+      </div>
+      <div class="msg" id="m-reg">Center your face in the oval, then capture.</div>
+      <button class="btn" id="btn-cap">Capture Face</button>
+    </div>
+
+    <!-- Step 2: Calibration -->
+    <div id="s2" style="display:none">
+      <div class="slabel">Step 2 of 2 — Gaze Calibration</div>
+      <div class="pvid-wrap" id="pw2">
+        <video id="pv2" autoplay muted playsinline></video>
+        <svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+          <polyline points="18,45 18,18 45,18"   fill="none" stroke="rgba(232,160,32,0.7)" stroke-width="1.5"/>
+          <polyline points="355,18 382,18 382,45" fill="none" stroke="rgba(232,160,32,0.7)" stroke-width="1.5"/>
+          <polyline points="18,155 18,182 45,182" fill="none" stroke="rgba(232,160,32,0.7)" stroke-width="1.5"/>
+          <polyline points="355,182 382,182 382,155" fill="none" stroke="rgba(232,160,32,0.7)" stroke-width="1.5"/>
+          <circle cx="200" cy="100" r="8" fill="none" stroke="rgba(232,160,32,0.9)" stroke-width="1.5"/>
+          <line x1="170" y1="100" x2="230" y2="100" stroke="rgba(232,160,32,0.4)" stroke-width="1"/>
+          <line x1="200" y1="70"  x2="200" y2="130" stroke="rgba(232,160,32,0.4)" stroke-width="1"/>
+        </svg>
+      </div>
+      <div class="progress"><div class="prog-fill" id="cal-prog"></div></div>
+      <div class="msg" id="m-cal">Click Begin, then look at the center dot.</div>
+      <button class="btn" id="btn-cal">Begin Calibration</button>
+    </div>
+  </div>
+</div>
+
+<!-- Report overlay -->
+<div id="report-screen">
+  <div class="report-card">
+    <div class="rhead">
+      <div class="rhead-title">Integrity Report</div>
+      <div class="rhead-meta" id="r-meta">—</div>
+    </div>
+    <div class="rbody" id="r-body">
+      <!-- populated by JS -->
+    </div>
+  </div>
+</div>
+
+<!-- ── Main app shell ── -->
+<div id="app">
+  <header>
+    <div class="wordmark">ProctorWatch<sup>v1</sup></div>
+    <div id="sess-label" style="font-size:10px;color:var(--amber);letter-spacing:0.08em">NO SESSION</div>
+    <div class="h-meta">
+      <span><span class="dot" id="dot"></span><b id="conn-txt">OFFLINE</b></span>
+      <span>FPS <span id="fps">0</span></span>
+      <span>ELAPSED <span id="elapsed">00:00</span></span>
+      <span>FRAMES <span id="frames">0</span></span>
+    </div>
+    <button id="btn-end">End Session</button>
+  </header>
+
+  <main>
+    <div id="video-wrap">
+      <canvas id="canvas-out"></canvas>
+      <div class="cb tl"></div><div class="cb tr"></div>
+      <div class="cb bl"></div><div class="cb br"></div>
+      <div id="gaze"></div>
+      <div id="overlay">
+        <span class="badge b-attn" id="b-attn">ATTENTIVE</span>
+        <span class="badge b-id"   id="b-id">VERIFIED</span>
+        <span class="badge b-sound" id="b-sound">QUIET</span>
+      </div>
+    </div>
+  </main>
+
+  <aside>
+    <div class="sec">
+      <div class="sec-title">Attention</div>
+      <div id="attn-big">UNKNOWN</div>
+      <div id="attn-sub">AWAITING DATA</div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">Performance</div>
+      <div class="mrow"><span class="ml">Accuracy</span>  <span class="mv g" id="m-acc">—</span></div>
+      <div class="bar"><div class="barf g" id="b-acc" style="width:0%"></div></div>
+      <div class="mrow" style="margin-top:7px"><span class="ml">Precision</span><span class="mv" id="m-prec">—</span></div>
+      <div class="bar"><div class="barf" id="b-prec" style="width:0%"></div></div>
+      <div class="mrow" style="margin-top:7px"><span class="ml">Recall</span>   <span class="mv" id="m-rec">—</span></div>
+      <div class="bar"><div class="barf" id="b-rec" style="width:0%"></div></div>
+      <div class="mrow" style="margin-top:7px"><span class="ml">F1</span>       <span class="mv" id="m-f1">—</span></div>
+      <div class="bar"><div class="barf" id="b-f1" style="width:0%"></div></div>
+      <div class="mrow" style="margin-top:9px"><span class="ml">Attentive</span><span class="mv g" id="m-att">—</span></div>
+      <div class="bar"><div class="barf g" id="b-att" style="width:0%"></div></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">Timeline</div>
+      <canvas id="tl" height="40"></canvas>
+    </div>
+
+    <div class="sec" style="padding-bottom:8px">
+      <div class="sec-title">Events
+        <span id="alert-ct" style="color:var(--text-dim);font-size:9px">0</span>
+      </div>
+    </div>
+    <div id="alog"><div class="empty" id="alog-empty">No events yet</div></div>
+  </aside>
+
+  <div id="status-bar">
+    <div class="si"><span>YAW</span>   <span class="sv" id="s-yaw">0.0°</span></div>
+    <div class="si"><span>PITCH</span> <span class="sv" id="s-pitch">0.0°</span></div>
+    <div class="si"><span>GAZE X</span><span class="sv" id="s-gx">0.500</span></div>
+    <div class="si"><span>GAZE Y</span><span class="sv" id="s-gy">0.500</span></div>
+    <div class="si"><span>EAR</span>   <span class="sv" id="s-ear">0.000</span></div>
+    <div class="si"><span>CONF</span>  <span class="sv" id="s-conf">—</span></div>
+  </div>
+</div>
+
+<!-- hidden canvas for frame capture -->
+<canvas id="cap-c" style="display:none"></canvas>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const TIMELINE = new Array(200).fill(0.5);
+
+// ── State ──
+let sessionId = null, ws = null, stream = null;
+let audioCtx = null, analyser = null, audioArr = null;
+let fpsCounter = 0, fps = 0, frameCount = 0, startTime = null;
+let alertCount = 0, lastState = null, isActive = false;
+let calSamples = 0, calTimer = null;
+const CAL_TARGET = 40;
+
+// ── Startup: check for session_id in URL ──
+const params = new URLSearchParams(location.search);
+sessionId = params.get('session_id');
+
+if (!sessionId) {
+  $('no-session-screen').style.display = 'flex';
+} else {
+  $('setup-screen').style.display = 'flex';
+  init();
+}
+
+async function init() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: {ideal:640}, height: {ideal:480}, facingMode: 'user' },
+      audio: true,
+    });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = audioCtx.createMediaStreamSource(stream);
+    analyser  = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    src.connect(analyser);
+    audioArr = new Float32Array(analyser.fftSize);
+
+    attach($('pv1'));
+    connectWS();
+    goStep(1);
+  } catch (e) {
+    setMsg('m-reg', '✗ Camera access denied: ' + e.message, 'err');
+  }
+}
+
+function attach(vid) {
+  if (!stream) return;
+  vid.srcObject = stream;
+  vid.play().catch(() => {});
+}
+
+function getAudioRms() {
+  if (!analyser) return 0;
+  analyser.getFloatTimeDomainData(audioArr);
+  let s = 0;
+  for (let i = 0; i < audioArr.length; i++) s += audioArr[i] * audioArr[i];
+  return Math.sqrt(s / audioArr.length);
+}
+
+function captureB64(vid, q) {
+  const c = $('cap-c');
+  const w = vid.videoWidth || 640, h = vid.videoHeight || 480;
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.save(); ctx.scale(-1, 1); ctx.drawImage(vid, -w, 0, w, h); ctx.restore();
+  return c.toDataURL('image/jpeg', q || 0.85);
+}
+
+// ── WebSocket ──
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/${sessionId}`);
+
+  ws.onopen = () => {
+    $('dot').className = 'dot on';
+    $('conn-txt').textContent = 'CONNECTED';
+  };
+
+  ws.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'session_info') {
+      $('sess-label').textContent = `${msg.session_id} // ${msg.candidate_name}`;
+      $('setup-sub').textContent  = `${msg.exam_label || msg.exam_id} // INITIALIZING`;
+    }
+    if (msg.type === 'registered') onRegistered(msg);
+    if (msg.type === 'calibrated') onCalibrated();
+    if (msg.type === 'metrics')    updateUI(msg);
+    if (msg.type === 'alert')      addAlert(msg);
+    if (msg.type === 'session_ended') showReport(msg.report);
+    if (msg.type === 'error') setMsg('m-reg', '✗ ' + msg.message, 'err');
+  };
+
+  ws.onclose = () => {
+    $('dot').className = 'dot';
+    $('conn-txt').textContent = 'DISCONNECTED';
+  };
+}
+
+async function waitWS(ms) {
+  const t = Date.now();
+  while (Date.now() - t < ms) {
+    if (ws && ws.readyState === WebSocket.OPEN) return true;
+    await new Promise(r => setTimeout(r, 60));
+  }
+  return false;
+}
+
+// ── Setup steps ──
+function goStep(n) {
+  $('s1').style.display = n === 1 ? 'block' : 'none';
+  $('s2').style.display = n === 2 ? 'block' : 'none';
+  $('sb1').className = 'step' + (n > 1 ? ' done' : ' on');
+  $('sb2').className = 'step' + (n > 2 ? ' done' : n === 2 ? ' on' : '');
+  if (n === 2) attach($('pv2'));
+}
+
+$('btn-cap').onclick = async () => {
+  $('btn-cap').disabled = true;
+  $('btn-cap').textContent = 'Connecting…';
+  setMsg('m-reg', 'Connecting to server…');
+
+  if (!await waitWS(3000)) {
+    setMsg('m-reg', '✗ Connection failed. Retry.', 'err');
+    $('btn-cap').disabled = false;
+    $('btn-cap').textContent = 'Capture Face';
+    return;
+  }
+
+  $('pw1').classList.add('flash');
+  setTimeout(() => $('pw1').classList.remove('flash'), 200);
+
+  setMsg('m-reg', 'Analyzing face…');
+  ws.send(JSON.stringify({ type: 'register', data: captureB64($('pv1'), 0.85) }));
+};
+
+function onRegistered(msg) {
+  if (msg.success) {
+    setMsg('m-reg', '✓ Face registered', 'ok');
+    setTimeout(() => goStep(2), 700);
+  } else {
+    setMsg('m-reg', '✗ ' + msg.message, 'err');
+    $('btn-cap').disabled = false;
+    $('btn-cap').textContent = 'Capture Face';
+  }
+}
+
+$('btn-cal').onclick = () => {
+  $('btn-cal').disabled = true;
+  setMsg('m-cal', 'Stay still, look at the dot…');
+  calSamples = 0;
+  calTimer = setInterval(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'calibrate', data: captureB64($('pv2'), 0.7) }));
+    calSamples++;
+    $('cal-prog').style.width = Math.min(calSamples / CAL_TARGET * 100, 100) + '%';
+    if (calSamples >= CAL_TARGET) {
+      clearInterval(calTimer);
+      ws.send(JSON.stringify({ type: 'calibrate_done' }));
+      setMsg('m-cal', 'Calibration complete…', 'ok');
+    }
+  }, 80);
+};
+
+function onCalibrated() {
+  $('setup-screen').style.display = 'none';
+  $('btn-end').style.display = 'inline-block';
+  startMonitor();
+}
+
+// ── End session ──
+$('btn-end').onclick = () => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  $('btn-end').disabled = true;
+  $('btn-end').textContent = 'Ending…';
+  ws.send(JSON.stringify({ type: 'end_session' }));
+};
+
+// ── Monitor loop ──
+function startMonitor() {
+  isActive  = true;
+  startTime = Date.now();
+  setInterval(() => { fps = fpsCounter; fpsCounter = 0; }, 1000);
+  setInterval(tickElapsed, 1000);
+
+  const vid = document.createElement('video');
+  vid.srcObject = stream; vid.autoplay = true; vid.muted = true; vid.playsInline = true;
+  vid.play().catch(() => {});
+
+  const canvas = $('canvas-out'), ctx = canvas.getContext('2d');
+  let lastSend = 0;
+
+  (function loop() {
+    if (!isActive) return;
+    requestAnimationFrame(loop);
+    const now = performance.now();
+    if (vid.readyState >= 2 && vid.videoWidth > 0) {
+      canvas.width  = vid.videoWidth;
+      canvas.height = vid.videoHeight;
+      ctx.save(); ctx.scale(-1, 1); ctx.drawImage(vid, -canvas.width, 0); ctx.restore();
+      drawScanline(ctx, canvas.width, canvas.height);
+      fpsCounter++; frameCount++;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN && now - lastSend > 80) {
+      lastSend = now;
+      ws.send(JSON.stringify({ type: 'frame', data: captureB64(vid, 0.75), audio_rms: getAudioRms() }));
+    }
+  })();
+}
+
+function drawScanline(ctx, w, h) {
+  ctx.fillStyle = 'rgba(0,0,0,0.03)';
+  ctx.fillRect(0, (Date.now() / 8) % h, w, 2);
+  if (!lastState) return;
+  const s = lastState;
+  if (s.gaze_x != null) {
+    const r = $('video-wrap').getBoundingClientRect();
+    $('gaze').style.left = s.gaze_x * r.width  + 'px';
+    $('gaze').style.top  = s.gaze_y * r.height + 'px';
+  }
+}
+
+// ── UI update ──
+function updateUI({ state: s, metrics: m }) {
+  lastState = s;
+  const attn = s.attention;
+  $('attn-big').textContent = attn;
+  $('attn-big').style.color = attn === 'ATTENTIVE' ? 'var(--green)' : attn === 'INATTENTIVE' ? 'var(--red)' : 'var(--text-mid)';
+  $('attn-sub').textContent = s.candidate_status || '';
+
+  $('b-attn').textContent = attn;
+  $('b-attn').className   = 'badge b-attn' + (attn === 'INATTENTIVE' ? ' bad' : '');
+  $('b-id').textContent   = s.identity || 'UNKNOWN';
+  const bs = $('b-sound');
+  bs.textContent = s.sound ? 'SPEAKING' : 'QUIET';
+  bs.className   = 'badge b-sound' + (s.sound ? ' on' : '');
+
+  setM('acc',  m.accuracy,  true);
+  setM('prec', m.precision, false);
+  setM('rec',  m.recall,    false);
+  setM('f1',   m.f1_score,  false);
+  $('m-att').textContent = m.attentive_pct + '%';
+  $('b-att').style.width = m.attentive_pct + '%';
+
+  $('s-yaw').textContent   = s.head_yaw.toFixed(1)   + '°';
+  $('s-pitch').textContent = s.head_pitch.toFixed(1)  + '°';
+  $('s-gx').textContent    = s.gaze_x.toFixed(3);
+  $('s-gy').textContent    = s.gaze_y.toFixed(3);
+  $('s-ear').textContent   = s.ear.toFixed(3);
+  $('s-conf').textContent  = (s.match_confidence * 100).toFixed(0) + '%';
+  $('frames').textContent  = m.total_frames.toLocaleString();
+  $('fps').textContent     = fps;
+
+  TIMELINE.push(attn === 'ATTENTIVE' ? 1 : attn === 'INATTENTIVE' ? 0 : 0.5);
+  if (TIMELINE.length > 200) TIMELINE.shift();
+  drawTL();
+}
+
+function setM(id, val, isGood) {
+  const pct = Math.round(val * 100);
+  $('m-' + id).textContent = pct + '%';
+  $('b-' + id).style.width  = pct + '%';
+  const cls = isGood ? (pct >= 85 ? 'g' : pct < 65 ? 'r' : '') : '';
+  $('m-' + id).className = 'mv' + (cls ? ' ' + cls : '');
+  $('b-' + id).className = 'barf' + (cls ? ' ' + cls : '');
+}
+
+function drawTL() {
+  const c = $('tl'), ctx = c.getContext('2d');
+  c.width = c.offsetWidth;
+  const w = c.width, h = c.height, bw = w / TIMELINE.length;
+  ctx.clearRect(0, 0, w, h);
+  TIMELINE.forEach((v, i) => {
+    ctx.fillStyle = v===1 ? 'rgba(0,212,110,0.7)' : v===0 ? 'rgba(240,64,64,0.7)' : 'rgba(80,80,80,0.4)';
+    ctx.fillRect(i * bw, 0, Math.max(bw - 0.5, 1), h);
+  });
+}
+
+function addAlert(a) {
+  alertCount++;
+  $('alert-ct').textContent = alertCount;
+  const em = $('alog-empty');
+  if (em) em.remove();
+  const div = document.createElement('div');
+  div.className = 'aitem ' + a.severity;
+  div.innerHTML = `<div class="ae">${a.event}</div><div class="am">${a.message}</div><div class="at">${new Date().toTimeString().slice(0,8)}</div>`;
+  $('alog').insertBefore(div, $('alog').firstChild);
+  while ($('alog').children.length > 50) $('alog').removeChild($('alog').lastChild);
+
+  // postMessage to parent (LMS integration)
+  window.parent.postMessage({
+    type: 'proctor_alert', event: a.event, severity: a.severity,
+    message: a.message, sessionId, timestamp: new Date().toISOString(),
+  }, '*');
+}
+
+function tickElapsed() {
+  if (!startTime) return;
+  const s = Math.floor((Date.now() - startTime) / 1000);
+  $('elapsed').textContent = String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+}
+
+// ── Report display ──
+function showReport(r) {
+  isActive = false;
+  $('btn-end').style.display = 'none';
+
+  const v = r.integrity_verdict;
+  const m = r.metrics;
+  const b = r.behavioral_events;
+
+  $('r-meta').textContent =
+    `${r.candidate_name}  ·  ${r.exam_label || r.exam_id}  ·  ${r.session_id}  ·  ${r.duration_seconds}s`;
+
+  $('r-body').innerHTML = `
+    <div class="verdict-box ${v.result}">
+      <div>
+        <div class="verdict-label">${v.result}</div>
+        <div class="verdict-score">Integrity Score: ${v.score}/100</div>
+      </div>
+    </div>
+
+    <div class="rsec-title">Attention Metrics</div>
+    <div class="rmetric-grid">
+      <div class="rmetric"><div class="rmetric-label">Accuracy</div>
+        <div class="rmetric-val ${m.accuracy>=0.85?'g':m.accuracy<0.65?'r':''}">${(m.accuracy*100).toFixed(1)}%</div></div>
+      <div class="rmetric"><div class="rmetric-label">Attentive</div>
+        <div class="rmetric-val ${m.attentive_pct>=60?'g':m.attentive_pct<40?'r':''}">${m.attentive_pct.toFixed(1)}%</div></div>
+      <div class="rmetric"><div class="rmetric-label">Precision</div>
+        <div class="rmetric-val">${(m.precision*100).toFixed(1)}%</div></div>
+      <div class="rmetric"><div class="rmetric-label">F1-Score</div>
+        <div class="rmetric-val">${(m.f1_score*100).toFixed(1)}%</div></div>
+    </div>
+
+    <div class="rsec-title">Behavioral Events</div>
+    <div class="alert-tally">
+      <div class="tally-item"><div class="tally-n">${b.alert_breakdown.INATTENTIVE}</div><div class="tally-l">Inattentive</div></div>
+      <div class="tally-item"><div class="tally-n" style="color:var(--red)">${b.alert_breakdown.IDENTITY_MISMATCH}</div><div class="tally-l">Identity</div></div>
+      <div class="tally-item"><div class="tally-n" style="color:var(--amber)">${b.alert_breakdown.SOUND_DETECTED}</div><div class="tally-l">Sound</div></div>
+      <div class="tally-item"><div class="tally-n">${b.face_verifications_fail}</div><div class="tally-l">Face Fails</div></div>
+    </div>
+
+    ${v.flags.length ? `
+    <div class="rsec-title">Flags</div>
+    <ul class="flag-list">${v.flags.map(f=>`<li>${f}</li>`).join('')}</ul>` : ''}
+
+    <div class="report-btns">
+      <button class="rbtn primary"   onclick="downloadReport()">Download JSON</button>
+      <button class="rbtn secondary" onclick="downloadCSV()">Download CSV</button>
+      <button class="rbtn secondary" onclick="closeReport()">Close</button>
+    </div>
+  `;
+
+  $('report-screen').style.display = 'flex';
+
+  // Notify parent platform
+  window.parent.postMessage({
+    type: 'proctor_session_ended', sessionId, verdict: v,
+    reportUrl: `/api/sessions/${sessionId}/report`,
+    timestamp: new Date().toISOString(),
+  }, '*');
+}
+
+function downloadReport() {
+  window.open(`/api/sessions/${sessionId}/report`, '_blank');
+}
+function downloadCSV() {
+  window.open(`/api/sessions/${sessionId}/report/csv`, '_blank');
+}
+function closeReport() {
+  $('report-screen').style.display = 'none';
+}
+
+function setMsg(id, txt, cls) {
+  const el = $(id);
+  el.textContent = txt;
+  el.className   = 'msg' + (cls ? ' ' + cls : '');
+}
+</script>
+</body>
+</html>
