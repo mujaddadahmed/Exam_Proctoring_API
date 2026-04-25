@@ -1,1 +1,1 @@
-web: pip install opencv-python-headless==4.9.0.80 --force-reinstall -q && python server.py
+web: pip install numpy==1.26.4 opencv-python-headless==4.9.0.80 --force-reinstall -q && python server.py
