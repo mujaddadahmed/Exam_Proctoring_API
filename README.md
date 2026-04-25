@@ -1,204 +1,61 @@
-# ProctorWatch API — Developer Documentation
+# ProctorWatch — Exam Proctoring API
 
-> Real-time AI-powered exam proctoring as an embeddable service. Your platform owns the candidate — ProctorWatch owns the monitoring.
+> Real-time AI-powered exam proctoring as an embeddable service.  
+> Your platform owns the candidate — ProctorWatch owns the monitoring.
 
----
-
-## Table of Contents
-
-1. [Overview](#overview)
-2. [How It Works](#how-it-works)
-3. [Getting Started](#getting-started)
-4. [Platform Dashboard — Demo App](#platform-dashboard--demo-app)
-5. [REST API Reference](#rest-api-reference)
-6. [WebSocket Protocol](#websocket-protocol)
-7. [Webhook Integration](#webhook-integration)
-8. [Integrity Report Schema](#integrity-report-schema)
-9. [Verdict & Scoring Logic](#verdict--scoring-logic)
-10. [Alert Types](#alert-types)
-11. [Integration Examples](#integration-examples)
-12. [Production Checklist](#production-checklist)
+**Live API:** `https://examproctoringapi-production.up.railway.app`  
+**Interactive Docs:** `https://examproctoringapi-production.up.railway.app/docs`  
+**Demo Dashboard:** `https://examproctoringapi-production.up.railway.app/static/platform-dashboard(example usage app).html`
 
 ---
 
-## Overview
+## What It Does
 
-ProctorWatch is a FastAPI-based proctoring backend that you embed into your exam platform via a simple `<iframe>`. It handles:
+ProctorWatch monitors exam candidates in real time via their webcam and microphone. You embed it into your platform with a single `<iframe>` and receive live integrity alerts via webhook or `postMessage`. At the end of the exam you fetch a full integrity report with a PASS / REVIEW / FAIL verdict.
 
-- **Face registration** — enrolls the candidate's face at session start
-- **Gaze calibration** — establishes a personal baseline for each candidate
-- **Live attention monitoring** — tracks head pose, gaze direction, and eye state in real time
-- **Identity verification** — periodically re-checks that the same person is still present
-- **Sound detection** — flags ambient audio above a configurable threshold
-- **Alert delivery** — pushes alerts to your platform via webhook or `postMessage`
-- **Integrity reports** — generates a structured JSON report at session end
-
----
-
-## How It Works
-
-```
-Your Platform Backend
-        │
-        ▼
-POST /api/sessions  ──────────────────────────────────┐
-        │                                             │
-        │  ← session_id + embed_url                   │
-        ▼                                             │
-<iframe src="{embed_url}"                             │
-        allow="camera; microphone">                   │
-        │                                             │
-        │  (candidate interacts with widget)          │
-        ▼                                             │
-WebSocket /ws/{session_id}                            │
-  • register  (face enrollment)                       │
-  • calibrate (gaze baseline)                         │
-  • frame     (live monitoring frames)                │
-  • end_session                                       │
-        │                                             │
-        │  Real-time alerts ──────────────────────────┤
-        │  via webhook POST or postMessage            │
-        │                                             │
-        ▼                                             │
-GET /api/sessions/{id}/report   ◄─────────────────────┘
-```
+**Capabilities:**
+- Face registration & periodic identity verification
+- Gaze tracking and head pose estimation
+- Attention classification (attentive / inattentive)
+- Eye closure detection
+- Sound level monitoring
+- Real-time alerts with cooldown logic
+- Per-session integrity score and report
+- Per-frame CSV export
 
 ---
 
-## Getting Started
+## Quick Start (5 Steps)
 
-### Requirements
-
-```
-Python 3.10+
-OpenCV
-MediaPipe
-FastAPI
-Uvicorn
-httpx
-```
-
-Install dependencies:
+### Step 1 — Create a session (from your backend)
 
 ```bash
-pip install -r requirements.txt
-```
-
-### Running the Server
-
-```bash
-python server.py
-```
-
-Server starts at `http://localhost:8000`.
-
-Interactive API docs are available at `http://localhost:8000/docs`.
-
----
-
-## Platform Dashboard — Demo App
-
-A fully working example platform is included in the repository at:
-
-```
-static/platform-dashboard(example usage app).html
-```
-
-Open it directly in your browser while the server is running:
-
-```
-http://localhost:8000/static/platform-dashboard(example usage app).html
-```
-
-### What it demonstrates
-
-- **Creating sessions** — fill in candidate name, ID, exam ID and label, then click `CREATE SESSION` to call `POST /api/sessions`
-- **Embedding the proctor widget** — the widget iframe loads automatically after session creation, giving the candidate the full registration → calibration → monitoring flow
-- **Live session list** — the left panel polls `GET /api/sessions` every few seconds and shows all active and ended sessions with their alert counts
-- **Real-time API call log** — the right panel displays every REST call made (method, endpoint, status code, latency) so you can see exactly what your platform backend should replicate
-- **postMessage event log** — shows every alert and metric event sent by the widget via `postMessage`, demonstrating how your frontend can listen for live integrity events without a webhook
-- **Report button** — click `REPORT` on any ended session to fetch and display the full JSON integrity report
-
-### Using it as a reference
-
-The dashboard is intentionally plain HTML/JS with no framework dependencies. Read through it to understand:
-
-- How to construct the `POST /api/sessions` request from a form
-- How to embed the `embed_url` in an iframe
-- How to listen for `postMessage` events from the widget
-- How to poll session status and display live metrics
-- How to fetch and render the final integrity report
-
-> **Note:** The dashboard is a development and demo tool. It connects directly to `http://localhost:8000` and is not intended for production use as-is.
-
----
-
-## REST API Reference
-
-### Health Check
-
-```
-GET /health
+curl -X POST https://examproctoringapi-production.up.railway.app/api/sessions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "candidate_id":   "cand_001",
+    "candidate_name": "Alice Johnson",
+    "exam_id":        "midterm_2025",
+    "exam_label":     "Midterm — Computer Science",
+    "webhook_url":    "https://your-platform.com/webhooks/proctor"
+  }'
 ```
 
 **Response:**
-
-```json
-{
-  "status": "ok",
-  "active_sessions": 2,
-  "total_sessions": 5
-}
-```
-
----
-
-### Create a Session
-
-```
-POST /api/sessions
-```
-
-Call this from your **platform backend** before presenting the exam to the candidate. Never call this from the frontend — it is a server-to-server call.
-
-**Request Body:**
-
-```json
-{
-  "candidate_id":   "cand_001",
-  "candidate_name": "Alice Johnson",
-  "exam_id":        "midterm_2025",
-  "exam_label":     "Midterm — Computer Science",
-  "webhook_url":    "https://your-platform.com/webhooks/proctor",
-  "metadata":       { "course": "CS101", "instructor": "Dr. Smith" }
-}
-```
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `candidate_id` | string | No | Your internal candidate identifier |
-| `candidate_name` | string | No | Display name shown in the widget |
-| `exam_id` | string | No | Your exam identifier |
-| `exam_label` | string | No | Human-readable exam title |
-| `webhook_url` | string | No | URL to receive real-time alert POSTs |
-| `metadata` | object | No | Arbitrary key-value pairs stored with the report |
-
-**Response `201`:**
-
 ```json
 {
   "session_id": "a1b2c3d4",
-  "embed_url":  "http://localhost:8000/?session_id=a1b2c3d4",
+  "embed_url":  "https://examproctoringapi-production.up.railway.app/?session_id=a1b2c3d4",
   "ws_url":     "/ws/a1b2c3d4",
-  "created_at": "2026-04-24T10:00:00.000000"
+  "created_at": "2026-04-25T10:00:00.000000"
 }
 ```
 
-Use `embed_url` as the `src` of your iframe:
+### Step 2 — Embed the widget in your exam page
 
 ```html
 <iframe
-  src="http://localhost:8000/?session_id=a1b2c3d4"
+  src="https://examproctoringapi-production.up.railway.app/?session_id=a1b2c3d4"
   allow="camera; microphone"
   width="100%"
   height="600px"
@@ -206,19 +63,113 @@ Use `embed_url` as the `src` of your iframe:
 </iframe>
 ```
 
+The widget handles everything automatically:
+1. Asks candidate for camera/microphone permission
+2. Registers their face
+3. Runs gaze calibration
+4. Starts live monitoring
+
+### Step 3 — Receive real-time alerts
+
+**Option A — Webhook** (server-to-server, recommended):
+
+```javascript
+// Your Express webhook receiver
+app.post('/webhooks/proctor', express.json(), (req, res) => {
+  const { event, severity, candidate_id, exam_id, message } = req.body;
+
+  if (event === 'IDENTITY_MISMATCH') {
+    // Notify instructor, pause exam, flag candidate
+  }
+  if (event === 'INATTENTIVE') {
+    // Log warning, show proctor dashboard alert
+  }
+  if (event === 'SESSION_ENDED') {
+    const { verdict } = req.body;
+    // Store result: verdict.result is "PASS", "REVIEW", or "FAIL"
+  }
+
+  res.sendStatus(200);
+});
+```
+
+**Option B — postMessage** (frontend, no server needed):
+
+```javascript
+window.addEventListener('message', (event) => {
+  const { type, event: alertEvent, severity, message } = event.data;
+
+  if (type === 'alert') {
+    console.log(`${severity}: ${alertEvent} — ${message}`);
+  }
+  if (type === 'session_ended') {
+    console.log('Verdict:', event.data.report.integrity_verdict.result);
+  }
+});
+```
+
+### Step 4 — End the session
+
+```bash
+curl -X POST https://examproctoringapi-production.up.railway.app/api/sessions/a1b2c3d4/end
+```
+
+The widget can also end the session automatically when the candidate submits the exam.
+
+### Step 5 — Fetch the integrity report
+
+```bash
+curl https://examproctoringapi-production.up.railway.app/api/sessions/a1b2c3d4/report
+```
+
 ---
 
-### List Sessions
+## REST API Reference
 
-```
-GET /api/sessions
-GET /api/sessions?status=active
-```
+Base URL: `https://examproctoringapi-production.up.railway.app`
 
-Optional `status` filter: `waiting`, `connected`, `calibrating`, `active`, `ended`, `disconnected`.
+### `GET /health`
+Health check. Verify the server is running.
 
 **Response:**
+```json
+{ "status": "ok", "active_sessions": 1, "total_sessions": 5 }
+```
 
+---
+
+### `POST /api/sessions`
+Create a new proctoring session. Call this from your **platform backend** before the exam starts.
+
+**Request body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `candidate_id` | string | No | Your internal candidate ID |
+| `candidate_name` | string | No | Display name shown in widget |
+| `exam_id` | string | No | Your exam identifier |
+| `exam_label` | string | No | Human-readable exam title |
+| `webhook_url` | string | No | URL to receive real-time alert POSTs |
+| `metadata` | object | No | Any extra key-value data to store with the report |
+
+**Response `201`:**
+```json
+{
+  "session_id": "a1b2c3d4",
+  "embed_url":  "https://examproctoringapi-production.up.railway.app/?session_id=a1b2c3d4",
+  "ws_url":     "/ws/a1b2c3d4",
+  "created_at": "2026-04-25T10:00:00.000000"
+}
+```
+
+---
+
+### `GET /api/sessions`
+List all sessions. Filter by status with `?status=active`.
+
+**Status values:** `waiting` `connected` `calibrating` `active` `ended` `disconnected`
+
+**Response:**
 ```json
 [
   {
@@ -226,7 +177,7 @@ Optional `status` filter: `waiting`, `connected`, `calibrating`, `active`, `ende
     "candidate_name": "Alice Johnson",
     "exam_id":        "midterm_2025",
     "status":         "active",
-    "started_at":     "2026-04-24T10:00:00.000000",
+    "started_at":     "2026-04-25T10:00:00.000000",
     "alert_count":    3
   }
 ]
@@ -234,254 +185,16 @@ Optional `status` filter: `waiting`, `connected`, `calibrating`, `active`, `ende
 
 ---
 
-### Get Session Status
-
-```
-GET /api/sessions/{session_id}
-```
-
-Returns live session state including the last 5 alerts and current attention metrics.
+### `GET /api/sessions/{session_id}`
+Get live status of a session including current attention state and recent alerts.
 
 **Response:**
-
 ```json
 {
   "session_id":     "a1b2c3d4",
   "candidate_name": "Alice Johnson",
-  "candidate_id":   "cand_001",
-  "exam_id":        "midterm_2025",
   "status":         "active",
-  "started_at":     "2026-04-24T10:00:00.000000",
   "current_state": {
-    "attention":        "ATTENTIVE",
-    "candidate_status": "ATTENTIVE (Direct gaze)",
-    "identity":         "VERIFIED",
-    "match_confidence": 0.94,
-    "sound":            false,
-    "sound_level":      0.0012,
-    "head_yaw":         -2.3,
-    "head_pitch":       5.1,
-    "gaze_x":           0.502,
-    "gaze_y":           0.491,
-    "gaze_dev":         0.008,
-    "ear":              0.312,
-    "eyes_too_far":     false
-  },
-  "metrics": { ... },
-  "alert_count":    3,
-  "recent_alerts":  [ ... ]
-}
-```
-
----
-
-### End a Session
-
-```
-POST /api/sessions/{session_id}/end
-```
-
-Finalizes the session, flushes the CSV log, and locks the report. Safe to call multiple times.
-
-**Response:**
-
-```json
-{
-  "session_id": "a1b2c3d4",
-  "status":     "ended",
-  "verdict": {
-    "score":  85,
-    "result": "PASS",
-    "flags":  []
-  }
-}
-```
-
----
-
-### Get Integrity Report
-
-```
-GET /api/sessions/{session_id}/report
-GET /api/sessions/{session_id}/report?fmt=text
-```
-
-Returns the full integrity report. Pass `?fmt=text` for a plain-text version suitable for logging or email.
-
-See [Integrity Report Schema](#integrity-report-schema) for the full response structure.
-
----
-
-### Download CSV Log
-
-```
-GET /api/sessions/{session_id}/report/csv
-```
-
-Downloads the raw per-frame CSV collected during the session. Useful for offline analysis.
-
-**CSV columns:** `timestamp`, `session_time`, `attention_state`, `identity_status`, `sound_detected`, `sound_level`, `head_yaw`, `head_pitch`, `gaze_x`, `gaze_y`, `ear`, `confidence`
-
----
-
-## WebSocket Protocol
-
-Connect to:
-
-```
-ws://localhost:8000/ws/{session_id}
-```
-
-All messages are JSON. The widget (`index.html`) handles this automatically — you only need the WebSocket protocol if you are building a custom frontend.
-
-### Message Flow
-
-```
-Client                          Server
-  │                               │
-  │──── ping ────────────────────►│
-  │◄─── pong ─────────────────────│
-  │                               │
-  │──── register (frame) ────────►│  Face enrollment
-  │◄─── registered ───────────────│
-  │                               │
-  │──── calibrate (frames) ──────►│  Repeated ~30 frames
-  │◄─── calibrating ──────────────│
-  │                               │
-  │──── calibrate_done ──────────►│
-  │◄─── calibrated ───────────────│
-  │                               │
-  │──── frame (loop) ────────────►│  Live monitoring
-  │◄─── metrics ──────────────────│
-  │◄─── alert (when triggered) ───│
-  │                               │
-  │──── end_session ─────────────►│
-  │◄─── session_ended ────────────│
-```
-
----
-
-### Client → Server Messages
-
-#### `ping`
-```json
-{ "type": "ping" }
-```
-Keepalive. Server responds with `pong`.
-
----
-
-#### `register`
-Sends a face image for enrollment. Should be called once at session start.
-
-```json
-{
-  "type": "register",
-  "data": "<base64-encoded JPEG, with or without data URI prefix>"
-}
-```
-
-Server responds with:
-```json
-{
-  "type":    "registered",
-  "success": true,
-  "message": "Face registered successfully"
-}
-```
-
----
-
-#### `calibrate`
-Sends calibration frames so the server can measure the candidate's natural head pose and gaze baseline. Send approximately 30 frames while the candidate looks at the center of the screen.
-
-```json
-{
-  "type": "calibrate",
-  "data": "<base64-encoded JPEG>"
-}
-```
-
-Server responds with:
-```json
-{
-  "type":    "calibrating",
-  "samples": 14
-}
-```
-
----
-
-#### `calibrate_done`
-Signals that calibration is complete. The server computes median baseline values and activates live monitoring.
-
-```json
-{ "type": "calibrate_done" }
-```
-
-Server responds with:
-```json
-{
-  "type": "calibrated",
-  "baseline": {
-    "yaw":    -1.45,
-    "pitch":   8.30,
-    "gaze_x":  0.501,
-    "gaze_y":  0.489
-  }
-}
-```
-
----
-
-#### `frame`
-Sends a live monitoring frame. Call this in a loop (target ~10 fps). Include the audio RMS level from the microphone.
-
-```json
-{
-  "type":      "frame",
-  "data":      "<base64-encoded JPEG>",
-  "audio_rms": 0.012
-}
-```
-
-Server responds with a `metrics` message (see below).
-
----
-
-#### `end_session`
-Ends the session from the client side and receives the full report.
-
-```json
-{ "type": "end_session" }
-```
-
----
-
-### Server → Client Messages
-
-#### `session_info`
-Sent immediately on WebSocket connection.
-
-```json
-{
-  "type":           "session_info",
-  "session_id":     "a1b2c3d4",
-  "candidate_name": "Alice Johnson",
-  "exam_id":        "midterm_2025",
-  "exam_label":     "Midterm — Computer Science"
-}
-```
-
----
-
-#### `metrics`
-Sent after every `frame` message.
-
-```json
-{
-  "type": "metrics",
-  "state": {
     "attention":        "ATTENTIVE",
     "candidate_status": "ATTENTIVE (Direct gaze)",
     "identity":         "VERIFIED",
@@ -496,78 +209,21 @@ Sent after every `frame` message.
     "ear":              0.312,
     "eyes_too_far":     false
   },
-  "metrics": {
-    "accuracy":      0.9967,
-    "precision":     0.9075,
-    "recall":        0.8936,
-    "f1_score":      0.9005,
-    "total_frames":  450,
-    "attentive_pct": 82.4,
-    "sound_count":   3,
-    "face_pass":     5,
-    "face_fail":     1
-  }
+  "alert_count":   3,
+  "recent_alerts": [ ... ]
 }
 ```
 
 ---
 
-#### `alert`
-Sent when an integrity event is triggered. Also POSTed to your `webhook_url` if configured.
+### `POST /api/sessions/{session_id}/end`
+End a session and lock the report. Safe to call multiple times.
 
+**Response:**
 ```json
 {
-  "type":       "alert",
-  "event":      "INATTENTIVE",
-  "severity":   "warning",
-  "message":    "INATTENTIVE (Head and eyes away)",
-  "timestamp":  "2026-04-24T10:05:32.123456",
-  "session_id": "a1b2c3d4"
-}
-```
-
----
-
-#### `session_ended`
-Sent in response to `end_session`. Contains the full integrity report.
-
-```json
-{
-  "type":   "session_ended",
-  "report": { ... }
-}
-```
-
----
-
-## Webhook Integration
-
-If you pass a `webhook_url` when creating a session, ProctorWatch will POST to it for every alert and when the session ends.
-
-### Alert Webhook Payload
-
-```json
-{
-  "event":          "IDENTITY_MISMATCH",
-  "severity":       "critical",
-  "message":        "Confidence 63%",
-  "timestamp":      "2026-04-24T10:07:48.000000",
-  "session_id":     "a1b2c3d4",
-  "candidate_id":   "cand_001",
-  "candidate_name": "Alice Johnson",
-  "exam_id":        "midterm_2025"
-}
-```
-
-### Session Ended Webhook Payload
-
-```json
-{
-  "event":        "SESSION_ENDED",
-  "session_id":   "a1b2c3d4",
-  "candidate_id": "cand_001",
-  "exam_id":      "midterm_2025",
-  "timestamp":    "2026-04-24T10:15:00.000000",
+  "session_id": "a1b2c3d4",
+  "status":     "ended",
   "verdict": {
     "score":  85,
     "result": "PASS",
@@ -576,12 +232,12 @@ If you pass a `webhook_url` when creating a session, ProctorWatch will POST to i
 }
 ```
 
-Webhooks have a 5-second timeout. Failed deliveries are logged server-side but not retried.
-
 ---
 
-## Integrity Report Schema
+### `GET /api/sessions/{session_id}/report`
+Fetch the full integrity report. Add `?fmt=text` for plain-text version.
 
+**Response:**
 ```json
 {
   "session_id":       "a1b2c3d4",
@@ -589,12 +245,10 @@ Webhooks have a 5-second timeout. Failed deliveries are logged server-side but n
   "candidate_name":   "Alice Johnson",
   "exam_id":          "midterm_2025",
   "exam_label":       "Midterm — Computer Science",
-  "metadata":         { },
-  "started_at":       "2026-04-24T10:00:00.000000",
-  "ended_at":         "2026-04-24T10:15:00.000000",
+  "started_at":       "2026-04-25T10:00:00.000000",
+  "ended_at":         "2026-04-25T10:15:00.000000",
   "duration_seconds": 900.0,
   "status":           "ended",
-
   "metrics": {
     "total_frames":       9000,
     "attentive_frames":   7560,
@@ -611,7 +265,6 @@ Webhooks have a 5-second timeout. Failed deliveries are logged server-side but n
       "false_negative":   60
     }
   },
-
   "behavioral_events": {
     "sound_detections":        12,
     "face_verifications_pass": 18,
@@ -624,17 +277,7 @@ Webhooks have a 5-second timeout. Failed deliveries are logged server-side but n
       "EYES_OFF_SCREEN":   1
     }
   },
-
-  "alert_log": [
-    {
-      "event":      "INATTENTIVE",
-      "severity":   "warning",
-      "message":    "INATTENTIVE (Head and eyes away)",
-      "timestamp":  "2026-04-24T10:03:15.000000",
-      "session_id": "a1b2c3d4"
-    }
-  ],
-
+  "alert_log": [ ... ],
   "integrity_verdict": {
     "score":  85,
     "result": "PASS",
@@ -645,31 +288,132 @@ Webhooks have a 5-second timeout. Failed deliveries are logged server-side but n
 
 ---
 
-## Verdict & Scoring Logic
+### `GET /api/sessions/{session_id}/report/csv`
+Download the raw per-frame CSV log for offline analysis.
 
-The integrity verdict is computed automatically at session end.
+**CSV columns:** `timestamp`, `session_time`, `attention_state`, `identity_status`, `sound_detected`, `sound_level`, `head_yaw`, `head_pitch`, `gaze_x`, `gaze_y`, `ear`, `confidence`
 
-### Results
+---
 
-| Result | Condition |
-|---|---|
-| `PASS` | Score ≥ 70 **and** zero identity mismatch events |
-| `REVIEW` | Score ≥ 45 (but failed PASS condition) |
-| `FAIL` | Score < 45 |
+## WebSocket Protocol
 
-### Scoring
+> The built-in widget (`index.html`) handles the WebSocket automatically. You only need this section if you are building a **custom frontend**.
 
-Starts at **100**. Each flag deducts **15 points**. Each identity mismatch event deducts an additional **20 points**.
+**Connect to:**
+```
+wss://examproctoringapi-production.up.railway.app/ws/{session_id}
+```
 
-### Flags (automatic)
+All messages are JSON.
 
-| Flag | Trigger |
-|---|---|
-| Candidate inattentive for X% of session | Attentive rate < 50% |
-| N identity mismatch event(s) detected | Any `IDENTITY_MISMATCH` critical alert |
-| High face verification failure rate (X%) | Face verification failure rate > 30% |
-| Excessive audio activity (N detections) | Sound detections > 200 |
-| Low classifier accuracy — consider recalibration | Accuracy < 70% |
+### Message Flow
+
+```
+Your Frontend                   ProctorWatch Server
+      │                               │
+      │──── register (1 frame) ──────►│  Enroll candidate's face
+      │◄─── registered ───────────────│
+      │                               │
+      │──── calibrate (~30 frames) ──►│  Build gaze baseline
+      │◄─── calibrating (each) ───────│
+      │                               │
+      │──── calibrate_done ──────────►│
+      │◄─── calibrated ───────────────│
+      │                               │
+      │──── frame (loop ~10fps) ─────►│  Live monitoring
+      │◄─── metrics ──────────────────│
+      │◄─── alert (when triggered) ───│
+      │                               │
+      │──── end_session ─────────────►│
+      │◄─── session_ended ────────────│
+```
+
+### Messages You Send
+
+#### `register` — enroll face
+```json
+{ "type": "register", "data": "<base64 JPEG>" }
+```
+Response: `{ "type": "registered", "success": true, "message": "Face registered successfully" }`
+
+#### `calibrate` — send calibration frames
+Send ~30 frames while candidate looks at screen center.
+```json
+{ "type": "calibrate", "data": "<base64 JPEG>" }
+```
+Response: `{ "type": "calibrating", "samples": 14 }`
+
+#### `calibrate_done` — finish calibration
+```json
+{ "type": "calibrate_done" }
+```
+Response: `{ "type": "calibrated", "baseline": { "yaw": -1.45, "pitch": 8.3, "gaze_x": 0.501, "gaze_y": 0.489 } }`
+
+#### `frame` — live monitoring frame
+Send in a loop at ~10 fps. Include microphone audio RMS level.
+```json
+{ "type": "frame", "data": "<base64 JPEG>", "audio_rms": 0.012 }
+```
+Response: `metrics` message (see below)
+
+#### `end_session` — close session
+```json
+{ "type": "end_session" }
+```
+Response: `session_ended` message with full report
+
+#### `ping` — keepalive
+```json
+{ "type": "ping" }
+```
+Response: `{ "type": "pong" }`
+
+### Messages You Receive
+
+#### `metrics` — sent after every frame
+```json
+{
+  "type": "metrics",
+  "state": {
+    "attention":        "ATTENTIVE",
+    "candidate_status": "ATTENTIVE (Direct gaze)",
+    "identity":         "VERIFIED",
+    "match_confidence": 0.94,
+    "sound":            false,
+    "head_yaw":         -2.3,
+    "head_pitch":        5.1,
+    "gaze_dev":         0.008,
+    "ear":              0.312,
+    "eyes_too_far":     false
+  },
+  "metrics": {
+    "total_frames":  450,
+    "attentive_pct": 82.4,
+    "accuracy":      0.9967,
+    "f1_score":      0.9005,
+    "face_pass":     5,
+    "face_fail":     1,
+    "sound_count":   3
+  }
+}
+```
+
+#### `alert` — integrity event fired
+```json
+{
+  "type":       "alert",
+  "event":      "INATTENTIVE",
+  "severity":   "warning",
+  "message":    "INATTENTIVE (Head and eyes away)",
+  "timestamp":  "2026-04-25T10:05:32.123456",
+  "session_id": "a1b2c3d4"
+}
+```
+
+#### `session_ended` — full report on close
+```json
+{ "type": "session_ended", "report": { ... } }
+```
 
 ---
 
@@ -677,21 +421,73 @@ Starts at **100**. Each flag deducts **15 points**. Each identity mismatch event
 
 | Event | Severity | Cooldown | Trigger |
 |---|---|---|---|
-| `INATTENTIVE` | `warning` | 10s | Attention state is `INATTENTIVE` |
-| `IDENTITY_MISMATCH` | `critical` | 20s | Face recognizer returns `DIFFERENT PERSON` |
+| `INATTENTIVE` | `warning` | 10s | Candidate not looking at screen |
+| `IDENTITY_MISMATCH` | `critical` | 20s | Different person detected |
 | `SOUND_DETECTED` | `info` | 8s | Audio RMS > 0.035 |
 | `EYES_OFF_SCREEN` | `warning` | 12s | Gaze deviation exceeds threshold |
 
-Cooldowns prevent alert spam — the same alert type will not fire more than once per cooldown window per session.
+Cooldowns prevent alert spam per session.
 
 ---
 
-## Integration Examples
+## Verdict & Scoring
 
-### Node.js / Express — Create a session
+| Result | Condition |
+|---|---|
+| `PASS` | Score ≥ 70 and zero identity mismatches |
+| `REVIEW` | Score ≥ 45 |
+| `FAIL` | Score < 45 |
 
+Score starts at **100**. Each flag deducts **15 points**. Each identity mismatch deducts an additional **20 points**.
+
+**Flags triggered by:**
+- Attentive rate < 50%
+- Any identity mismatch event
+- Face verification failure rate > 30%
+- Sound detections > 200
+- Classifier accuracy < 70%
+
+---
+
+## Webhook Events
+
+Set `webhook_url` when creating a session to receive POST requests for every alert and on session end.
+
+**Alert payload:**
+```json
+{
+  "event":          "IDENTITY_MISMATCH",
+  "severity":       "critical",
+  "message":        "Confidence 63%",
+  "timestamp":      "2026-04-25T10:07:48.000000",
+  "session_id":     "a1b2c3d4",
+  "candidate_id":   "cand_001",
+  "candidate_name": "Alice Johnson",
+  "exam_id":        "midterm_2025"
+}
+```
+
+**Session ended payload:**
+```json
+{
+  "event":      "SESSION_ENDED",
+  "session_id": "a1b2c3d4",
+  "exam_id":    "midterm_2025",
+  "timestamp":  "2026-04-25T10:15:00.000000",
+  "verdict":    { "score": 85, "result": "PASS", "flags": [] }
+}
+```
+
+Webhooks have a 5-second timeout and are not retried on failure.
+
+---
+
+## Code Examples
+
+### Node.js
 ```javascript
-const response = await fetch('http://localhost:8000/api/sessions', {
+// 1. Create session
+const res = await fetch('https://examproctoringapi-production.up.railway.app/api/sessions', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
@@ -699,114 +495,94 @@ const response = await fetch('http://localhost:8000/api/sessions', {
     candidate_name: req.user.name,
     exam_id:        exam.id,
     exam_label:     exam.title,
-    webhook_url:    'https://your-platform.com/webhooks/proctor',
-    metadata:       { course_id: exam.courseId }
+    webhook_url:    'https://your-platform.com/webhooks/proctor'
   })
 });
+const { session_id, embed_url } = await res.json();
 
-const { session_id, embed_url } = await response.json();
-// Store session_id, render embed_url in your exam page
+// 2. Embed in your page
+// <iframe src={embed_url} allow="camera; microphone" />
+
+// 3. End session
+await fetch(`https://examproctoringapi-production.up.railway.app/api/sessions/${session_id}/end`, {
+  method: 'POST'
+});
+
+// 4. Get report
+const report = await fetch(
+  `https://examproctoringapi-production.up.railway.app/api/sessions/${session_id}/report`
+).then(r => r.json());
+
+console.log(report.integrity_verdict); // { score: 85, result: "PASS", flags: [] }
 ```
 
-### Python — Create a session
-
+### Python
 ```python
 import httpx
 
-resp = httpx.post("http://localhost:8000/api/sessions", json={
+BASE = "https://examproctoringapi-production.up.railway.app"
+
+# 1. Create session
+resp = httpx.post(f"{BASE}/api/sessions", json={
     "candidate_id":   "cand_001",
     "candidate_name": "Alice Johnson",
     "exam_id":        "midterm_2025",
     "webhook_url":    "https://your-platform.com/webhooks/proctor"
 })
+session = resp.json()
+session_id = session["session_id"]
+embed_url  = session["embed_url"]
 
-data = resp.json()
-session_id = data["session_id"]
-embed_url  = data["embed_url"]
-```
+# 2. End session
+httpx.post(f"{BASE}/api/sessions/{session_id}/end")
 
-### Embedding the widget
-
-```html
-<!-- In your exam page template -->
-<div class="proctor-container">
-  <iframe
-    id="proctor-widget"
-    src="{{ embed_url }}"
-    allow="camera; microphone"
-    width="320"
-    height="240"
-    frameborder="0"
-    style="border-radius: 8px;">
-  </iframe>
-</div>
-```
-
-### Receiving postMessage events (no webhook needed)
-
-```javascript
-window.addEventListener('message', (event) => {
-  const { type, event: alertEvent, severity, message } = event.data;
-
-  if (type === 'alert') {
-    console.log(`[ProctorWatch] ${severity.toUpperCase()}: ${alertEvent} — ${message}`);
-
-    if (alertEvent === 'IDENTITY_MISMATCH') {
-      // Pause exam, notify instructor
-    }
-  }
-
-  if (type === 'session_ended') {
-    const { report } = event.data;
-    console.log('Verdict:', report.integrity_verdict.result);
-  }
-});
-```
-
-### Webhook receiver (Express)
-
-```javascript
-app.post('/webhooks/proctor', express.json(), (req, res) => {
-  const { event, severity, session_id, candidate_id, exam_id, verdict } = req.body;
-
-  if (event === 'IDENTITY_MISMATCH') {
-    notifyInstructor({ candidate_id, exam_id, message: 'Identity mismatch detected' });
-  }
-
-  if (event === 'SESSION_ENDED') {
-    saveReport({ session_id, verdict });
-  }
-
-  res.sendStatus(200);
-});
-```
-
-### Fetching the final report
-
-```javascript
-// Call after session ends
-const response = await fetch(`http://localhost:8000/api/sessions/${sessionId}/report`);
-const report = await response.json();
-
-const { result, score, flags } = report.integrity_verdict;
-// result: "PASS" | "REVIEW" | "FAIL"
-// score: 0–100
-// flags: string[]
+# 3. Fetch report
+report = httpx.get(f"{BASE}/api/sessions/{session_id}/report").json()
+print(report["integrity_verdict"])  # {'score': 85, 'result': 'PASS', 'flags': []}
 ```
 
 ---
 
-## Production Checklist
+## Running Locally
 
-- [ ] **Restrict CORS** — change `allow_origins=["*"]` in `server.py` to your platform domain
-- [ ] **Use HTTPS/WSS** — the widget requires a secure context for camera/microphone access in production
-- [ ] **Persist sessions** — the current store is in-memory; replace `sessions: dict` with a database for multi-process or multi-server deployments
-- [ ] **Secure the API** — add authentication (API key header, JWT, etc.) to all `/api/` endpoints
-- [ ] **Set `webhook_url`** — use webhooks rather than polling for real-time alert delivery
-- [ ] **Tune thresholds** — review `config.py` values (`GAZE_THRESH`, `EAR_THRESH`, `HEAD_YAW_TOL_DEG`, etc.) for your candidate population
-- [ ] **Monitor calibration quality** — check that `calibrate_done` baseline values are reasonable (pitch typically 0°–20°, yaw within ±15°) before trusting session results
-- [ ] **Handle disconnections** — sessions in `disconnected` status were interrupted; decide whether to allow reconnection or mark as incomplete
+```bash
+git clone https://github.com/mujaddadahmed/Exam_Proctoring_API
+cd Exam_Proctoring_API
+pip install -r requirements.txt
+python server.py
+```
+
+Server runs at `http://localhost:8000`.  
+Interactive docs at `http://localhost:8000/docs`.
+
+> **Note:** Requires Python 3.11. MediaPipe does not support Python 3.12+.
 
 ---
 
-*ProctorWatch v1.0.0 — FastAPI + OpenCV + MediaPipe*
+## Demo App
+
+A full working example platform is included at:
+
+```
+static/platform-dashboard(example usage app).html
+```
+
+Access it at:
+```
+https://examproctoringapi-production.up.railway.app/static/platform-dashboard(example usage app).html
+```
+
+Use it to create sessions, watch live monitoring, view alerts, and inspect reports — all without writing any code.
+
+---
+
+## Production Notes
+
+- **CORS** — restrict `allow_origins=["*"]` in `server.py` to your domain before going live
+- **Sessions** — currently in-memory; sessions are lost on server restart. Add a database for production
+- **Auth** — no authentication is implemented. Add API key or JWT validation to `/api/` endpoints
+- **HTTPS/WSS** — required for camera and microphone access in browsers
+
+---
+
+*ProctorWatch v1.0.0 — FastAPI · OpenCV · MediaPipe*
