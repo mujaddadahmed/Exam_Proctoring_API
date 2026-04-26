@@ -18,6 +18,7 @@ RUNNING:
 """
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import base64
 import io
 import json
@@ -73,6 +74,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # ── In-memory session store ───────────────────────────────────────────────────
 sessions: dict[str, dict] = {}
 _alert_cooldowns: dict[str, float] = {}
+_executor = ThreadPoolExecutor(max_workers=2)
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
@@ -449,13 +451,16 @@ async def _process_frame(ws: WebSocket, s: dict, msg: dict, session_id: str):
     audio_rms      = float(msg.get("audio_rms", 0.0))
     sound_detected = audio_rms > 0.035
 
-    td = s["gaze_tracker"].process_frame(frame)
+    loop = asyncio.get_event_loop()
+
+    # Run heavy CV work in thread pool to avoid blocking the async event loop
+    td = await loop.run_in_executor(_executor, s["gaze_tracker"].process_frame, frame)
     ar = s["attention_analyzer"].analyze_frame(td)
 
     now = time.time()
     fr  = s["face_recognizer"]
     if now - s["last_verify_time"] > FACE_VERIFY_INTERVAL:
-        result, _ = fr.verify_face(frame)
+        result, _ = await loop.run_in_executor(_executor, fr.verify_face, frame)
         if result is not None:
             s["metrics"].update_identity(result)
             s["last_verify_time"] = now
