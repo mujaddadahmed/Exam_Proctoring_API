@@ -512,7 +512,7 @@ if (!sessionId) {
 async function init() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: {ideal:640}, height: {ideal:480}, facingMode: 'user' },
+      video: { width: {ideal:320}, height: {ideal:240}, facingMode: 'user' },
       audio: true,
     });
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -546,7 +546,10 @@ function getAudioRms() {
 
 function captureB64(vid, q) {
   const c = $('cap-c');
-  const w = vid.videoWidth || 640, h = vid.videoHeight || 480;
+  const MAX = 320;
+  const srcW = vid.videoWidth || 320, srcH = vid.videoHeight || 240;
+  const scale = Math.min(1, MAX / srcW);
+  const w = Math.round(srcW * scale), h = Math.round(srcH * scale);
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
   ctx.save(); ctx.scale(-1, 1); ctx.drawImage(vid, -w, 0, w, h); ctx.restore();
@@ -637,7 +640,7 @@ $('btn-cal').onclick = () => {
   calSamples = 0;
   calTimer = setInterval(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'calibrate', data: captureB64($('pv2'), 0.7) }));
+    ws.send(JSON.stringify({ type: 'calibrate', data: captureB64($('pv2'), 0.4) }));
     calSamples++;
     $('cal-prog').style.width = Math.min(calSamples / CAL_TARGET * 100, 100) + '%';
     if (calSamples >= CAL_TARGET) {
@@ -645,7 +648,7 @@ $('btn-cal').onclick = () => {
       ws.send(JSON.stringify({ type: 'calibrate_done' }));
       setMsg('m-cal', 'Calibration complete…', 'ok');
     }
-  }, 80);
+  }, 200);
 };
 
 function onCalibrated() {
@@ -687,9 +690,9 @@ function startMonitor() {
       drawScanline(ctx, canvas.width, canvas.height);
       fpsCounter++; frameCount++;
     }
-    if (ws && ws.readyState === WebSocket.OPEN && now - lastSend > 80) {
+    if (ws && ws.readyState === WebSocket.OPEN && now - lastSend > 500) {
       lastSend = now;
-      ws.send(JSON.stringify({ type: 'frame', data: captureB64(vid, 0.75), audio_rms: getAudioRms() }));
+      ws.send(JSON.stringify({ type: 'frame', data: captureB64(vid, 0.4), audio_rms: getAudioRms() }));
     }
   })();
 }
