@@ -40,7 +40,6 @@ from face_recognizer import OpenCVFaceRecognizer
 from gaze_tracker import GazeTracker
 from attention_analyzer import AttentionAnalyzer
 from metrics import PerformanceMetrics
-from data_logger import DataLogger
 from config import FACE_VERIFY_INTERVAL
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -235,7 +234,6 @@ async def health():
           description="Call from your platform backend before presenting the exam.")
 async def create_session(body: SessionCreateRequest):
     sid      = str(uuid.uuid4())[:8]
-    csv_path = f"session_{sid}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     now      = datetime.now().isoformat()
 
     sessions[sid] = {
@@ -253,8 +251,7 @@ async def create_session(body: SessionCreateRequest):
         "gaze_tracker":       GazeTracker(),
         "attention_analyzer": None,
         "metrics":            PerformanceMetrics(),
-        "data_logger":        DataLogger(csv_path),
-        "csv_path":           csv_path,
+        "csv_rows":           [],
         "last_verify_time":   0,
         "alert_log":          [],
         "current_state":      {},
@@ -305,7 +302,6 @@ async def end_session(session_id: str):
 
     s["status"]   = "ended"
     s["ended_at"] = datetime.now().isoformat()
-    s["data_logger"].finalize()
     try: s["gaze_tracker"].close()
     except Exception: pass
 
@@ -336,11 +332,18 @@ async def get_report(session_id: str, fmt: Optional[str] = Query(None)):
          description="Raw per-frame CSV collected during the session.")
 async def download_csv(session_id: str):
     s = _get_or_404(session_id)
-    p = s.get("csv_path")
-    if not p or not Path(p).exists():
+    rows = s.get("csv_rows", [])
+    if not rows:
         raise HTTPException(404, "CSV not found — session may not have started monitoring")
+    cols = ["timestamp","session_time","attention_state","identity_status",
+            "sound_detected","sound_level","head_yaw","head_pitch",
+            "gaze_x","gaze_y","ear","confidence"]
+    lines = [",".join(cols)]
+    for r in rows:
+        lines.append(",".join(str(r.get(c,"")) for c in cols))
+    csv_bytes = "\n".join(lines).encode("utf-8")
     return StreamingResponse(
-        io.BytesIO(Path(p).read_bytes()),
+        io.BytesIO(csv_bytes),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=proctor_{session_id}.csv"},
     )
@@ -418,7 +421,6 @@ async def ws_endpoint(websocket: WebSocket, session_id: str):
                 if s["status"] != "ended":
                     s["status"]   = "ended"
                     s["ended_at"] = datetime.now().isoformat()
-                    s["data_logger"].finalize()
                     try: s["gaze_tracker"].close()
                     except Exception: pass
                 report = _build_report(s)
@@ -481,7 +483,7 @@ async def _process_frame(ws: WebSocket, s: dict, msg: dict, session_id: str):
     s["current_state"] = state
 
     session_start = datetime.fromisoformat(s["started_at"]).timestamp()
-    s["data_logger"].log_data({
+    s["csv_rows"].append({
         "timestamp": datetime.now().isoformat(),
         "session_time": round(now - session_start, 2),
         "attention_state": state["attention"], "identity_status": state["identity"],
