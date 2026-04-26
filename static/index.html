@@ -620,7 +620,7 @@ $('btn-cap').onclick = async () => {
   setTimeout(() => $('pw1').classList.remove('flash'), 200);
 
   setMsg('m-reg', 'Analyzing face…');
-  ws.send(JSON.stringify({ type: 'register', data: captureB64($('pv1'), 0.85) }));
+  ws.send(JSON.stringify({ type: 'register', data: captureB64($('pv1'), 1.0) }));
 };
 
 function onRegistered(msg) {
@@ -640,7 +640,7 @@ $('btn-cal').onclick = () => {
   calSamples = 0;
   calTimer = setInterval(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'calibrate', data: captureB64($('pv2'), 0.7) }));
+    ws.send(JSON.stringify({ type: 'calibrate', data: captureB64($('pv2'), 0.6) }));
     calSamples++;
     $('cal-prog').style.width = Math.min(calSamples / CAL_TARGET * 100, 100) + '%';
     if (calSamples >= CAL_TARGET) {
@@ -690,9 +690,9 @@ function startMonitor() {
       drawScanline(ctx, canvas.width, canvas.height);
       fpsCounter++; frameCount++;
     }
-    if (ws && ws.readyState === WebSocket.OPEN && now - lastSend > 160) {
+    if (ws && ws.readyState === WebSocket.OPEN && now - lastSend > 120) {
       lastSend = now;
-      ws.send(JSON.stringify({ type: 'frame', data: captureB64(vid, 0.75), audio_rms: getAudioRms() }));
+      ws.send(JSON.stringify({ type: 'frame', data: captureB64(vid, 0.6), audio_rms: getAudioRms() }));
     }
   })();
 }

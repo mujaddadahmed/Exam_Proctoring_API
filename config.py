@@ -6,8 +6,8 @@ import os
 from datetime import datetime
 
 # ----------------- Calibration Config -----------------
-CALIBRATION_SECONDS = 2.0
-FACE_VERIFY_INTERVAL = 5.0
+CALIBRATION_SECONDS = 3.0
+FACE_VERIFY_INTERVAL = 4.0
 
 # ----------------- Sound Detection Config -----------------
 SOUND_THRESHOLD = 0.01
@@ -37,7 +37,7 @@ LEFT_EYE_TOP_BOTTOM = (159, 145)
 RIGHT_EYE_TOP_BOTTOM = (386, 374)
 
 # ----------------- Detection Thresholds -----------------
-HEAD_YAW_TOL_DEG = 25.0
+HEAD_YAW_TOL_DEG = 30.0
 HEAD_PITCH_TOL_DEG = 22.0
 GAZE_THRESH = 0.07
 GAZE_RELAXED = 0.12
